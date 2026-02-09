@@ -1,0 +1,26 @@
+{
+    "translations": {
+        "de": {
+            "Topic root": "Topic-Stamm",
+            "Auto create instances": "Instanzen automatisch anlegen",
+            "Debug": "Debug",
+            "ReceiveData": "Empfangene Daten",
+            "Config": "Konfiguration",
+            "Topic=%s Payload=%s": "Topic=%s Payload=%s",
+            "Invalid JSON": "Ungültiges JSON",
+            "unique_id/deviceId missing": "unique_id/deviceId fehlt",
+            "state_topic missing": "state_topic fehlt"
+        },
+        "en": {
+            "Topic root": "Topic root",
+            "Auto create instances": "Auto create instances",
+            "Debug": "Debug",
+            "ReceiveData": "Receive data",
+            "Config": "Config",
+            "Topic=%s Payload=%s": "Topic=%s Payload=%s",
+            "Invalid JSON": "Invalid JSON",
+            "unique_id/deviceId missing": "unique_id/deviceId missing",
+            "state_topic missing": "state_topic missing"
+        }
+    }
+}

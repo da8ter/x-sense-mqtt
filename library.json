@@ -1,0 +1,12 @@
+{
+    "id": "{2B1DB43B-728C-236F-E804-2D0B87E4DEB9}",
+    "name": "XSenseMQTT",
+    "author": "Stephan Sprick",
+    "url": "",
+    "compatibility": {
+        "version": "7.1"
+    },
+    "version": "0.1",
+    "build": 1,
+    "date": 0
+}

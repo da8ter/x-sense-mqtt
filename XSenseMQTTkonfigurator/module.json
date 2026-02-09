@@ -1,0 +1,12 @@
+{
+    "id": "{7AC19C57-DFF1-766E-913E-BF5B0876AF3E}",
+    "name": "XSenseMQTTkonfigurator",
+    "type": 4,
+    "vendor": "",
+    "aliases": [],
+    "parentRequirements": ["{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}"],
+    "childRequirements": ["{C523B0B6-870E-9726-778A-0FF5C6E9656E}"],
+    "implemented": ["{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}"],
+    "prefix": "XSNK",
+    "url": ""
+}
