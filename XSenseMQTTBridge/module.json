@@ -4,7 +4,7 @@
     "aliases": ["X-Sense MQTT Bridge"],
     "type": 2,
     "vendor": "Stephan Sprick",
-    "parentRequirements": ["{043EA491-0325-4ADD-8FC2-A30C8EEB4D3F}"],
+    "parentRequirements": ["{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}"],
     "childRequirements": ["{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
     "implemented": ["{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}", "{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
     "prefix": "XSNB",
