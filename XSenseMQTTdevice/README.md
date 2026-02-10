@@ -1,4 +1,4 @@
-# XSenseMQTTdevice
+# X Sense MQTT Device
 Dieses Modul verarbeitet die State-Topics eines X-Sense Geräts (Home Assistant MQTT Discovery), legt Variablen an und aktualisiert den Status.
 
 ### Inhaltsverzeichnis
@@ -23,18 +23,18 @@ Dieses Modul verarbeitet die State-Topics eines X-Sense Geräts (Home Assistant 
 
 ### 2. Voraussetzungen
 
-- IP-Symcon ab Version 7.1
-- XSenseMQTTBridge Instanz als Parent (diese ist mit dem MQTT Server verbunden)
-- Discovery-Config über Home Assistant MQTT Discovery
+- IP-Symcon ab Version 8.1
+- X-Sense MQTT Bridge Instanz als Gateway
 
 ### 3. Software-Installation
 
-- Über den Module Store das `XSenseMQTTdevice`-Modul installieren.
+- Über den Module Store das Modul `X-Sense MQTT` installieren.
 - Alternativ über das Module Control die Repository-URL hinzufügen.
+https://github.com/da8ter/x-sense-mqtt/tree/main
 
 ### 4. Einrichten der Instanzen in IP-Symcon
 
-Die Instanz wird üblicherweise über den `XSenseMQTTkonfigurator` angelegt. Alternativ kann sie manuell hinzugefügt werden.
+Die Instanz wird üblicherweise über den `X Sense MQTT Konfigurator` angelegt.
 
 __Konfigurationsseite__:
 

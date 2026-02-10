@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-class XSenseMQTTkonfigurator extends IPSModule
+class XSenseMQTTKonfigurator extends IPSModule
 {
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
     private const BRIDGE_DATA_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}';

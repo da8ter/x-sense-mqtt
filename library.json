@@ -1,8 +1,12 @@
 {
     "id": "{2B1DB43B-728C-236F-E804-2D0B87E4DEB9}",
-    "name": "XSenseMQTT",
+    "name": "X-Sense MQTT",
+    "aliases":
+    [
+        "X-Sense MQTT"
+    ],
     "author": "Stephan Sprick",
-    "url": "",
+    "url": "https://github.com/da8ter/x-sense-mqtt",
     "compatibility": {
         "version": "7.1"
     },

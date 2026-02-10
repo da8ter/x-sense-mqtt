@@ -14,6 +14,8 @@ class XSenseMQTTdevice extends IPSModule
         $this->RegisterPropertyBoolean('CreateUnknownEntities', true);
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('Entities', '{}');
+        $this->RegisterAttributeInteger('AutoConnectTries', 0);
+        $this->RegisterTimer('AutoConnect', 0, 'XSND_AutoConnect($_IPS[\'TARGET\']);');
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
 
@@ -32,9 +34,13 @@ class XSenseMQTTdevice extends IPSModule
 
         $parentId = $this->getParentId();
         if ($parentId <= 0) {
+            $this->scheduleAutoConnect();
             $this->SetStatus(104);
             return;
         }
+
+        $this->SetTimerInterval('AutoConnect', 0);
+        $this->WriteAttributeInteger('AutoConnectTries', 0);
 
         $parentStatus = 0;
         try {
@@ -52,6 +58,69 @@ class XSenseMQTTdevice extends IPSModule
         $this->SetSummary($this->ReadPropertyString('DeviceId'));
         $this->debug('ApplyChanges', sprintf('Status=102, DeviceId=%s, ParentId=%d', $this->ReadPropertyString('DeviceId'), $parentId));
         $this->requestDiscovery();
+    }
+
+    public function AutoConnect(): void
+    {
+        $parentId = $this->getParentId();
+        if ($parentId > 0) {
+            $this->SetTimerInterval('AutoConnect', 0);
+            $this->WriteAttributeInteger('AutoConnectTries', 0);
+            $this->ApplyChanges();
+            return;
+        }
+
+        $tries = $this->ReadAttributeInteger('AutoConnectTries');
+        if ($tries >= 12) {
+            $this->SetTimerInterval('AutoConnect', 0);
+            return;
+        }
+        $this->WriteAttributeInteger('AutoConnectTries', $tries + 1);
+
+        if ($this->autoConnectToBridge() > 0) {
+            $this->SetTimerInterval('AutoConnect', 0);
+            $this->WriteAttributeInteger('AutoConnectTries', 0);
+            $this->ApplyChanges();
+        }
+    }
+
+    private function scheduleAutoConnect(): void
+    {
+        $tries = $this->ReadAttributeInteger('AutoConnectTries');
+        if ($tries >= 12) {
+            $this->SetTimerInterval('AutoConnect', 0);
+            return;
+        }
+        $this->SetTimerInterval('AutoConnect', 1000);
+    }
+
+    private function autoConnectToBridge(): int
+    {
+        $active = [];
+        foreach (IPS_GetInstanceListByModuleID(self::BRIDGE_MODULE_GUID) as $id) {
+            $status = 0;
+            try {
+                $status = (int)(@IPS_GetInstance($id)['InstanceStatus'] ?? 0);
+            } catch (Throwable $e) {
+                $status = 0;
+            }
+            if ($status === 102) {
+                $active[] = $id;
+            }
+        }
+
+        if (count($active) !== 1) {
+            return 0;
+        }
+
+        $target = (int)$active[0];
+        @IPS_ConnectInstance($this->InstanceID, $target);
+
+        $parentId = $this->getParentId();
+        if ($parentId === $target) {
+            return $parentId;
+        }
+        return 0;
     }
 
     public function ReceiveData($JSONString): string

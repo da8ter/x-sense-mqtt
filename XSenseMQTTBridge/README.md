@@ -1,4 +1,4 @@
-# XSenseMQTTBridge
+# X Sense MQTT Bridge
 
 Dieses Modul ist ein IP-Symcon **Splitter** zwischen dem MQTT Server und den X-Sense Modulen.
 
@@ -23,18 +23,19 @@ Dieses Modul ist ein IP-Symcon **Splitter** zwischen dem MQTT Server und den X-S
 
 ### 2. Voraussetzungen
 
-- IP-Symcon ab Version 7.1
-- MQTT Server Instanz (als Parent)
+- IP-Symcon ab Version 8.1
+- MQTT Server Instanz (als Schnittstelle)
 
 ### 3. Software-Installation
 
-- Über den Module Store das Modul installieren.
+- Über den Module Store das Modul`X-Sense MQTT` installieren.
 - Alternativ über das Module Control die Repository-URL hinzufügen.
+https://github.com/da8ter/x-sense-mqtt/tree/main
 
 ### 4. Einrichten der Instanzen in IP-Symcon
 
-1. MQTT-Server-Instanz anlegen und verbinden
-2. `XSenseMQTTBridge`-Instanz anlegen
+1. MQTT-Server-Instanz anlegen
+2. `X Sense MQTT Bridge`-Instanz anlegen
 3. Bridge mit dem MQTT-Server verbinden
 4. `TopicRoot` setzen (Standard: `homeassistant/binary_sensor`)
 

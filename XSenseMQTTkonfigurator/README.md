@@ -1,5 +1,5 @@
 # XSenseMQTTkonfigurator
-Dieses Modul liest Home Assistant MQTT Discovery Topics und stellt die gefundenen X-Sense Geräte in einer Liste dar, über die Device-Instanzen manuell erzeugt werden können.
+Dieses Modul stellt die gefundenen X-Sense Geräte in einer Liste dar, über die Device-Instanzen erzeugt werden können.
 
 ### Inhaltsverzeichnis
 
@@ -20,23 +20,24 @@ Dieses Modul liest Home Assistant MQTT Discovery Topics und stellt die gefundene
 
 ### 2. Voraussetzungen
 
-- IP-Symcon ab Version 7.1
-- XSenseMQTTBridge Instanz als Parent (diese ist mit dem MQTT Server verbunden)
+- IP-Symcon ab Version 8.1
+- X Sense MQTT Bridge Instanz als Gateway
 
 ### 3. Software-Installation
 
-- Über den Module Store das `XSenseMQTTkonfigurator`-Modul installieren.
-- Alternativ über das Module Control die Repository-URL hinzufügen.
+- Über den Module Store das Modul`X-Sense MQTT` installieren.
+- Alternativ über das Module Control die Repository-URL hinzufügen. 
+https://github.com/da8ter/x-sense-mqtt.git
 
 ### 4. Einrichten der Instanzen in IP-Symcon
 
 Unter „Instanz hinzufügen“ kann das Modul per Schnellfilter gefunden werden.
 
-1. `XSenseMQTTkonfigurator`-Instanz anlegen
-2. Als Parent die `XSenseMQTTBridge` auswählen
+1. `X Sense MQTT Konfigurator`-Instanz anlegen
+2. Als Gateway die `X Sense MQTT Bridge` auswählen
 3. Konfigurationsseite öffnen
 
-Wenn Discovery-Configs empfangen werden, erscheinen die Geräte in der Liste. Über die Liste können `XSenseMQTTdevice`-Instanzen manuell erstellt werden.
+Wenn Discovery-Configs empfangen werden, erscheinen die Geräte in der Liste. Über die Liste können `X Sense MQTT Device`-Instanzen manuell erstellt werden.
 
 __Konfigurationsseite__:
 

@@ -1,9 +1,9 @@
 {
     "id": "{C523B0B6-870E-9726-778A-0FF5C6E9656E}",
-    "name": "XSenseMQTTdevice",
+    "name": "X Sense MQTT Device",
+    "aliases": ["X-Sense MQTT Device"],
     "type": 3,
     "vendor": "Stephan Sprick",
-    "aliases": [],
     "parentRequirements": ["{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
     "childRequirements": [],
     "implemented": ["{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
