@@ -1,6 +1,11 @@
 {
     "elements": [
         {
+            "type": "ValidationTextBox",
+            "name": "TopicRoot",
+            "caption": "Topic root"
+        },
+        {
             "type": "CheckBox",
             "name": "Debug",
             "caption": "Debug"

@@ -24,8 +24,8 @@ Dieses Modul verarbeitet die State-Topics eines X-Sense Geräts (Home Assistant 
 ### 2. Voraussetzungen
 
 - IP-Symcon ab Version 7.1
-- MQTT Server Instanz als Parent
-- Discovery-Config über Home Assistant oder XSenseMQTTkonfigurator
+- XSenseMQTTBridge Instanz als Parent (diese ist mit dem MQTT Server verbunden)
+- Discovery-Config über Home Assistant MQTT Discovery
 
 ### 3. Software-Installation
 
@@ -34,15 +34,14 @@ Dieses Modul verarbeitet die State-Topics eines X-Sense Geräts (Home Assistant 
 
 ### 4. Einrichten der Instanzen in IP-Symcon
 
-Die Instanzen werden üblicherweise automatisch durch den `XSenseMQTTkonfigurator` angelegt. Alternativ kann die Instanz manuell hinzugefügt werden.
+Die Instanz wird üblicherweise über den `XSenseMQTTkonfigurator` angelegt. Alternativ kann sie manuell hinzugefügt werden.
 
 __Konfigurationsseite__:
 
 Name | Beschreibung
 -----|-------------
-Device ID | `device.identifiers[0]` aus der Discovery-Config
+Device ID | Gerätekennung aus dem Discovery Topic bzw. `device.identifiers[0]`
 Create unknown entities | Unbekannte Suffixe als Bool-Variable anlegen
-Debug | Zusätzliche Debug-Ausgaben
 
 ### 5. Statusvariablen und Profile
 
@@ -76,7 +75,7 @@ Das Modul stellt keine eigene Visualisierung bereit.
 
 ### 7. PHP-Befehlsreferenz
 
-`void XSND_UpdateDiscovery(string $Json);`  
+`void XSND_UpdateDiscovery(int $InstanzID, string $Json);`  
 Interne Schnittstelle für den Konfigurator, um Entity-Metadaten zu aktualisieren.
 
 ### 8. MQTT-Topics und Payload-Beispiele

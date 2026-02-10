@@ -1,5 +1,5 @@
 # XSenseMQTTkonfigurator
-Dieses Modul liest Home Assistant MQTT Discovery Topics, erstellt Geräteinstanzen automatisch und verteilt Entity-Metadaten an die Geräte.
+Dieses Modul liest Home Assistant MQTT Discovery Topics und stellt die gefundenen X-Sense Geräte in einer Liste dar, über die Device-Instanzen manuell erzeugt werden können.
 
 ### Inhaltsverzeichnis
 
@@ -16,14 +16,12 @@ Dieses Modul liest Home Assistant MQTT Discovery Topics, erstellt Geräteinstanz
 
 - Abonniert `homeassistant/binary_sensor/+/+/config`
 - Baut einen Discovery-Cache pro `unique_id`
-- Erstellt XSenseMQTTdevice-Instanzen pro `device.identifiers[0]`
-- Setzt die Geräte-Namen aus `device.name` (Fallback: deviceId)
-- Übergibt Entity-Metadaten an die Device-Instanzen
+- Zeigt Geräte in einer Konfigurator-Liste an und ermöglicht das manuelle Erstellen von Device-Instanzen
 
 ### 2. Voraussetzungen
 
 - IP-Symcon ab Version 7.1
-- MQTT Server Instanz als Parent
+- XSenseMQTTBridge Instanz als Parent (diese ist mit dem MQTT Server verbunden)
 
 ### 3. Software-Installation
 
@@ -34,13 +32,17 @@ Dieses Modul liest Home Assistant MQTT Discovery Topics, erstellt Geräteinstanz
 
 Unter „Instanz hinzufügen“ kann das Modul per Schnellfilter gefunden werden.
 
+1. `XSenseMQTTkonfigurator`-Instanz anlegen
+2. Als Parent die `XSenseMQTTBridge` auswählen
+3. Konfigurationsseite öffnen
+
+Wenn Discovery-Configs empfangen werden, erscheinen die Geräte in der Liste. Über die Liste können `XSenseMQTTdevice`-Instanzen manuell erstellt werden.
+
 __Konfigurationsseite__:
 
 Name | Beschreibung
 -----|-------------
-Topic root | Topic-Stamm für Discovery (`homeassistant/binary_sensor`)
-Auto create instances | Geräteinstanzen automatisch anlegen
-Debug | Zusätzliche Debug-Ausgaben
+Keine weiteren Einstellungen.
 
 ### 5. Statusvariablen und Profile
 
@@ -52,7 +54,9 @@ Das Modul stellt keine eigene Visualisierung bereit.
 
 ### 7. PHP-Befehlsreferenz
 
-Keine öffentlichen PHP-Funktionen.
+`void XSNK_SyncDiscoveryToDevices(int $InstanzID);`
+
+Überträgt den aktuellen Discovery-Cache an bestehende Device-Instanzen.
 
 ### 8. MQTT-Discovery Beispiele
 

@@ -1,0 +1,16 @@
+{
+    "translations": {
+        "de": {
+            "Topic root": "Topic-Root",
+            "Debug": "Debug-Modus",
+            "Topic=%s": "Topic=%s",
+            "ReceiveData": "Daten empfangen"
+        },
+        "en": {
+            "Topic root": "Topic root",
+            "Debug": "Debug mode",
+            "Topic=%s": "Topic=%s",
+            "ReceiveData": "Receive data"
+        }
+    }
+}

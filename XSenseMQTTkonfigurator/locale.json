@@ -1,8 +1,14 @@
 {
     "translations": {
         "de": {
-            "Topic root": "Topic-Stamm",
-            "Auto create instances": "Instanzen automatisch anlegen",
+            "Devices": "Geräte",
+            "Name": "Name",
+            "Device ID": "Geräte-ID",
+            "Model": "Modell",
+            "Entities": "Entitäten",
+            "Sync discovery to devices": "Discovery an Geräte übertragen",
+            "Active": "Aktiv",
+            "No Bridge connected": "Keine Bridge verbunden",
             "Debug": "Debug",
             "ReceiveData": "Empfangene Daten",
             "Config": "Konfiguration",
@@ -12,8 +18,14 @@
             "state_topic missing": "state_topic fehlt"
         },
         "en": {
-            "Topic root": "Topic root",
-            "Auto create instances": "Auto create instances",
+            "Devices": "Devices",
+            "Name": "Name",
+            "Device ID": "Device ID",
+            "Model": "Model",
+            "Entities": "Entities",
+            "Sync discovery to devices": "Sync discovery to devices",
+            "Active": "Active",
+            "No Bridge connected": "No Bridge connected",
             "Debug": "Debug",
             "ReceiveData": "Receive data",
             "Config": "Config",

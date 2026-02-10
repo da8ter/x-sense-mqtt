@@ -2,11 +2,11 @@
     "id": "{C523B0B6-870E-9726-778A-0FF5C6E9656E}",
     "name": "XSenseMQTTdevice",
     "type": 3,
-    "vendor": "",
+    "vendor": "Stephan Sprick",
     "aliases": [],
-    "parentRequirements": ["{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}"],
+    "parentRequirements": ["{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
     "childRequirements": [],
-    "implemented": ["{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}"],
+    "implemented": ["{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
     "prefix": "XSND",
-    "url": ""
+    "url": "https://github.com/da8ter/x-sense-mqtt"
 }

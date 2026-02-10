@@ -4,40 +4,60 @@ declare(strict_types=1);
 
 class XSenseMQTTdevice extends IPSModule
 {
-    private const MQTT_SERVER_GUID = '{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}';
-    private const MQTT_DATA_GUID = '{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}';
+    private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
+    private const BRIDGE_DATA_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}';
 
     public function Create(): void
     {
         parent::Create();
         $this->RegisterPropertyString('DeviceId', '');
         $this->RegisterPropertyBoolean('CreateUnknownEntities', true);
-        $this->RegisterPropertyBoolean('Debug', true);
+        $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('Entities', '{}');
+        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data): void
+    {
+        if ($Message === IPS_KERNELMESSAGE && $Data[0] === KR_READY) {
+            $this->ApplyChanges();
+        }
     }
 
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
 
-        if (method_exists($this, 'ConnectParent')) {
-            $this->ConnectParent(self::MQTT_SERVER_GUID);
+        $this->SetReceiveDataFilter('.*');
+
+        $parentId = $this->getParentId();
+        if ($parentId <= 0) {
+            $this->SetStatus(104);
+            return;
         }
 
-        if (!$this->HasActiveParent()) {
-            $this->SetStatus(200);
+        $parentStatus = 0;
+        try {
+            $parentStatus = (int)(@IPS_GetInstance($parentId)['InstanceStatus'] ?? 0);
+        } catch (Throwable $e) {
+            $parentStatus = 0;
+        }
+        if ($parentStatus !== 102) {
+            $this->SetStatus(104);
             return;
         }
 
         $this->SetStatus(102);
-        $this->refreshSubscriptions();
+        $this->updateReceiveDataFilter();
         $this->SetSummary($this->ReadPropertyString('DeviceId'));
+        $this->debug('ApplyChanges', sprintf('Status=102, DeviceId=%s, ParentId=%d', $this->ReadPropertyString('DeviceId'), $parentId));
+        $this->requestDiscovery();
     }
 
     public function ReceiveData($JSONString): string
     {
         $data = json_decode($JSONString, true);
-        if (!is_array($data) || ($data['DataID'] ?? '') !== self::MQTT_DATA_GUID) {
+        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_DATA_GUID) {
             return '';
         }
 
@@ -48,6 +68,11 @@ class XSenseMQTTdevice extends IPSModule
 
         $payload = $this->decodePayload($data['Payload'] ?? '');
         $this->debug('ReceiveData', sprintf($this->t('Topic=%s Payload=%s'), $topic, $payload));
+
+        if ($this->isConfigTopic($topic)) {
+            $this->processConfig($topic, $payload);
+            return '';
+        }
 
         $entities = $this->readEntities();
         $entry = $this->findEntityByTopic($topic, $entities);
@@ -68,29 +93,41 @@ class XSenseMQTTdevice extends IPSModule
 
     public function GetCompatibleParents(): string
     {
-        return json_encode(['type' => 'connect', 'moduleIDs' => [self::MQTT_SERVER_GUID]]);
+        return json_encode(['type' => 'connect', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
     }
 
     public function UpdateDiscovery(string $json): void
     {
+        $this->debug('UpdateDiscovery', sprintf('Received: %s', substr($json, 0, 200)));
+        
         $entry = json_decode($json, true);
         if (!is_array($entry)) {
             $this->debug('UpdateDiscovery', $this->t('Invalid JSON'));
             return;
         }
 
-        $deviceId = (string)($entry['device']['id'] ?? '');
+        $deviceId = $this->getTopicToken((string)($entry['state_topic'] ?? ''), 3);
+        if ($deviceId === '') {
+            $deviceId = $this->extractDeviceIdFromEntry($entry);
+        }
+        if ($deviceId !== '') {
+            $entry['device']['id'] = $deviceId;
+        }
+        $this->debug('UpdateDiscovery', sprintf('Extracted DeviceId=%s from entry', $deviceId));
+        
         if ($deviceId === '') {
             $this->debug('UpdateDiscovery', $this->t('DeviceId missing'));
             return;
         }
 
         $propertyDeviceId = trim($this->ReadPropertyString('DeviceId'));
+        $this->debug('UpdateDiscovery', sprintf('PropertyDeviceId=%s, EntryDeviceId=%s', $propertyDeviceId, $deviceId));
+        
         if ($propertyDeviceId === '') {
             IPS_SetProperty($this->InstanceID, 'DeviceId', $deviceId);
             IPS_ApplyChanges($this->InstanceID);
         } elseif (strcasecmp($propertyDeviceId, $deviceId) !== 0) {
-            $this->debug('UpdateDiscovery', $this->t('DeviceId mismatch'));
+            $this->debug('UpdateDiscovery', sprintf('%s (property=%s, entry=%s)', $this->t('DeviceId mismatch'), $propertyDeviceId, $deviceId));
             return;
         }
 
@@ -109,45 +146,157 @@ class XSenseMQTTdevice extends IPSModule
         $entities[$uniqueId] = $entry;
         $this->writeEntities($entities);
 
+        $this->debug('UpdateDiscovery', sprintf('Creating variables for suffix=%s, ident=%s', $entry['suffix'] ?? '', $entry['ident'] ?? ''));
         $this->ensureDeviceInfoVariables($entry['device'] ?? []);
         $this->ensureEntityVariable($entry);
-        $this->refreshSubscriptions($previousTopic);
+        $this->updateReceiveDataFilter();
+        $this->debug('UpdateDiscovery', 'Variables created successfully');
     }
 
-    private function refreshSubscriptions(string $previousTopic = ''): void
+    private function updateReceiveDataFilter(): void
     {
-        $entities = $this->readEntities();
-        $topics = [];
-        foreach ($entities as $entity) {
-            $topic = (string)($entity['state_topic'] ?? '');
-            if ($topic !== '') {
-                $topics[] = $topic;
-            }
-        }
+        $deviceId = trim($this->ReadPropertyString('DeviceId'));
 
-        $filter = '^$';
-        if (!empty($topics)) {
-            $escaped = array_map(fn(string $topic): string => preg_quote($topic, '/'), $topics);
-            $filter = '.*(' . implode('|', $escaped) . ').*';
-        }
-        $this->SetReceiveDataFilter($filter);
+        $sep = '(?:\\\\/|\\/)';
 
-        $parentId = $this->getParentId();
-        if ($parentId <= 0) {
+        if ($deviceId === '') {
+            $this->SetReceiveDataFilter('.*"Topic"\s*:\s*".*' . $sep . 'config".*');
             return;
         }
 
-        if ($previousTopic !== '' && !in_array($previousTopic, $topics, true)) {
-            if (function_exists('MQTT_Unsubscribe')) {
-                @MQTT_Unsubscribe($parentId, $previousTopic);
+        $escaped = preg_quote($deviceId, '/');
+        $filter = '.*"Topic"\s*:\s*".*' . $sep . $escaped . $sep . '[^"]+' . $sep . '(config|state)".*';
+        $this->SetReceiveDataFilter($filter);
+    }
+
+    private function requestDiscovery(): void
+    {
+        $parentId = $this->getParentId();
+        if ($parentId <= 0) {
+            $this->debug('requestDiscovery', 'No parent');
+            return;
+        }
+        $deviceId = trim($this->ReadPropertyString('DeviceId'));
+        $this->debug('requestDiscovery', sprintf('Requesting replay from Bridge %d for DeviceId=%s', $parentId, $deviceId));
+        if (function_exists('XSNB_ReplayDiscovery')) {
+            @XSNB_ReplayDiscovery($parentId, $deviceId);
+        } else {
+            $this->debug('requestDiscovery', 'XSNB_ReplayDiscovery not available');
+        }
+    }
+
+    private function getParentId(): int
+    {
+        $inst = @IPS_GetInstance($this->InstanceID);
+        return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
+    }
+
+    private function getTopicToken(string $topic, int $fromEnd): string
+    {
+        $parts = explode('/', trim($topic, '/'));
+        $index = count($parts) - $fromEnd;
+        if ($index >= 0 && $index < count($parts)) {
+            return (string)$parts[$index];
+        }
+        return '';
+    }
+
+    private function extractDeviceIdFromEntry(array $entry): string
+    {
+        if (isset($entry['device']['id']) && is_string($entry['device']['id'])) {
+            return trim($entry['device']['id']);
+        }
+        if (isset($entry['device'])) {
+            return $this->getDeviceIdentifier($entry['device']);
+        }
+        return '';
+    }
+
+    private function getDeviceIdentifier(array $device): string
+    {
+        if (!isset($device['identifiers'])) {
+            return '';
+        }
+        $identifiers = $device['identifiers'];
+        $values = [];
+        $add = function ($value) use (&$values): void {
+            if (is_string($value)) {
+                $value = trim($value);
+                if ($value !== '') {
+                    $values[] = $value;
+                }
+            }
+        };
+
+        if (is_string($identifiers)) {
+            $add($identifiers);
+        } elseif (is_array($identifiers)) {
+            foreach ($identifiers as $entry) {
+                if (is_array($entry)) {
+                    foreach ($entry as $nested) {
+                        $add($nested);
+                    }
+                } else {
+                    $add($entry);
+                }
             }
         }
 
-        if (function_exists('MQTT_Subscribe')) {
-            foreach ($topics as $topic) {
-                @MQTT_Subscribe($parentId, $topic, 0);
-            }
+        if (empty($values)) {
+            return '';
         }
+        return $values[count($values) - 1];
+    }
+
+    private function isConfigTopic(string $topic): bool
+    {
+        return str_ends_with($topic, '/config');
+    }
+
+    private function processConfig(string $topic, string $payload): void
+    {
+        if ($payload === '') {
+            return;
+        }
+
+        $cfg = json_decode($payload, true);
+        if (!is_array($cfg)) {
+            return;
+        }
+
+        $uniqueId = trim((string)($cfg['unique_id'] ?? $this->getTopicToken($topic, 2)));
+        $device = isset($cfg['device']) && is_array($cfg['device']) ? $cfg['device'] : [];
+        $deviceId = $this->getTopicToken($topic, 3);
+        if ($deviceId === '') {
+            $deviceId = $this->getDeviceIdentifier($device);
+        }
+        if ($uniqueId === '' || $deviceId === '') {
+            return;
+        }
+
+        $stateTopic = trim((string)($cfg['state_topic'] ?? ''));
+        if ($stateTopic === '') {
+            return;
+        }
+
+        $entry = [
+            'unique_id'      => $uniqueId,
+            'name'           => (string)($cfg['name'] ?? ''),
+            'state_topic'    => $stateTopic,
+            'payload_on'     => (string)($cfg['payload_on'] ?? ''),
+            'payload_off'    => (string)($cfg['payload_off'] ?? ''),
+            'value_template' => (string)($cfg['value_template'] ?? ''),
+            'suffix'         => $this->extractSuffix($uniqueId),
+            'device'         => [
+                'id'           => $deviceId,
+                'name'         => (string)($device['name'] ?? $deviceId),
+                'manufacturer' => (string)($device['manufacturer'] ?? ''),
+                'model'        => (string)($device['model'] ?? ''),
+                'sw_version'   => (string)($device['sw_version'] ?? '')
+            ]
+        ];
+
+        $this->UpdateDiscovery(json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
     private function processStatus(array $entry, $status): void
@@ -354,21 +503,21 @@ class XSenseMQTTdevice extends IPSModule
 
     private function registerBoolean(string $ident, string $name, int $position): void
     {
-        if (@$this->GetIDForIdent($ident) === 0) {
-            $this->RegisterVariableBoolean($ident, $name, '~Switch', $position);
+        if (@$this->GetIDForIdent($ident) === false) {
+            $this->RegisterVariableBoolean($ident, $name, '', $position);
         }
     }
 
     private function registerString(string $ident, string $name, int $position): void
     {
-        if (@$this->GetIDForIdent($ident) === 0) {
+        if (@$this->GetIDForIdent($ident) === false) {
             $this->RegisterVariableString($ident, $name, '', $position);
         }
     }
 
     private function registerInteger(string $ident, string $name, string $profile, int $position): void
     {
-        if (@$this->GetIDForIdent($ident) === 0) {
+        if (@$this->GetIDForIdent($ident) === false) {
             $this->RegisterVariableInteger($ident, $name, $profile, $position);
         }
     }
@@ -376,19 +525,10 @@ class XSenseMQTTdevice extends IPSModule
     private function setValueIfChanged(string $ident, $value): void
     {
         $varId = @$this->GetIDForIdent($ident);
-        if ($varId === 0) {
+        if ($varId === false) {
             return;
         }
-        $current = GetValue($varId);
-        if ($current !== $value) {
-            SetValue($varId, $value);
-        }
-    }
-
-    private function getParentId(): int
-    {
-        $inst = @IPS_GetInstance($this->InstanceID);
-        return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
+        SetValue($varId, $value);
     }
 
     private function debug(string $message, string $data): void
