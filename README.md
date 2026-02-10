@@ -26,11 +26,11 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 ## 3. Enthaltene Module
 
 - `X-Sense MQTT Bridge` (Splitter)
-  - README: `https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTBridge/README.md`
+  - README: https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTBridge/README.md
 - `X-Sense MQTT Konfigurator` (Konfigurator)
-  - README: `https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTkonfigurator/README.md`
+  - README: https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTkonfigurator/README.md
 - `X-Sense MQTT Device` (Device)
-  - README: `https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTdevice/README.md`
+  - README: https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTdevice/README.md
 
 ## 4. Einrichten der Instanzen in IP-Symcon
 
