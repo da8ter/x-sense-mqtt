@@ -95,7 +95,16 @@ class XSenseMQTTBridge extends IPSModuleStrict
         }
 
         if (str_ends_with($topic, '/config')) {
-            $this->updateDiscoveryCache($topic, (string)$payload);
+            // Decode payload if it's base64 encoded (from MQTT Server)
+            $payloadStr = '';
+            if (is_string($payload)) {
+                $payloadStr = $payload;
+            } elseif (is_array($payload)) {
+                // MQTT Server sends payload as byte array
+                $payloadStr = implode('', array_map('chr', $payload));
+            }
+            $this->debug('Config', sprintf('Topic=%s PayloadLen=%d', $topic, strlen($payloadStr)));
+            $this->updateDiscoveryCache($topic, $payloadStr);
         }
 
         $bridgeData = [
