@@ -133,7 +133,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                 [
                     'type'    => 'Button',
                     'caption' => 'Cache aktualisieren',
-                    'onClick' => 'IPS_RequestAction($_IPS[\'TARGET\'], "RefreshCache", true);'
+                    'onClick' => 'IPS_RequestAction($id, "RefreshCache", true);'
                 ]
             ],
             'status'  => [
