@@ -213,7 +213,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
     public function GetCompatibleParents(): string
     {
-        return json_encode(['type' => 'require', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
+        return json_encode(['type' => 'connect', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
     }
 
     public function SyncDiscoveryToDevices(): void

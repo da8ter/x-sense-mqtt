@@ -83,7 +83,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
 
     public function GetCompatibleParents(): string
     {
-        return json_encode(['type' => 'require', 'moduleIDs' => [self::MQTT_SERVER_GUID]]);
+        return json_encode(['type' => 'connect', 'moduleIDs' => [self::MQTT_SERVER_GUID]]);
     }
 
     public function ForwardToChildren(string $topic, string $payload): void
