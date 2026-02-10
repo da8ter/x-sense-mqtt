@@ -27,17 +27,6 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
             return;
         }
 
-        $bridgeStatus = 0;
-        try {
-            $bridgeStatus = (int)(@IPS_GetInstance($bridgeId)['InstanceStatus'] ?? 0);
-        } catch (Throwable $e) {
-            $bridgeStatus = 0;
-        }
-        if ($bridgeStatus !== 102) {
-            $this->SetStatus(104);
-            return;
-        }
-
         $this->SetStatus(102);
     }
 
