@@ -51,6 +51,9 @@ class XSenseMQTTKonfigurator extends IPSModule
     public function RetryConnect(): void
     {
         $parentId = $this->getParentId();
+        if ($parentId <= 0) {
+            $parentId = $this->autoConnectToBridge();
+        }
         if ($parentId > 0) {
             $status = 0;
             try {
@@ -73,6 +76,35 @@ class XSenseMQTTKonfigurator extends IPSModule
         }
         $this->WriteAttributeInteger('RetryTries', $tries + 1);
         $this->SetTimerInterval('RetryConnect', 1000);
+    }
+
+    private function autoConnectToBridge(): int
+    {
+        $active = [];
+        foreach (IPS_GetInstanceListByModuleID(self::BRIDGE_MODULE_GUID) as $id) {
+            $status = 0;
+            try {
+                $status = (int)(@IPS_GetInstance($id)['InstanceStatus'] ?? 0);
+            } catch (Throwable $e) {
+                $status = 0;
+            }
+            if ($status === 102) {
+                $active[] = $id;
+            }
+        }
+
+        if (count($active) !== 1) {
+            return 0;
+        }
+
+        $target = (int)$active[0];
+        @IPS_ConnectInstance($this->InstanceID, $target);
+
+        $parentId = $this->getParentId();
+        if ($parentId === $target) {
+            return $parentId;
+        }
+        return 0;
     }
 
     private function scheduleRetry(): void
@@ -186,7 +218,7 @@ class XSenseMQTTKonfigurator extends IPSModule
 
     public function GetCompatibleParents(): string
     {
-        return json_encode(['type' => 'connect', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
+        return json_encode(['type' => 'require', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
     }
 
     public function SyncDiscoveryToDevices(): void
