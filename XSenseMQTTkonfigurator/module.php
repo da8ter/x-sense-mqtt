@@ -13,6 +13,8 @@ class XSenseMQTTKonfigurator extends IPSModule
         parent::Create();
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('DiscoveryCache', '{}');
+        $this->RegisterAttributeInteger('RetryTries', 0);
+        $this->RegisterTimer('RetryConnect', 0, 'XSNK_RetryConnect($_IPS[\'TARGET\']);');
     }
 
     public function ApplyChanges(): void
@@ -23,6 +25,7 @@ class XSenseMQTTKonfigurator extends IPSModule
 
         $parentId = $this->getParentId();
         if ($parentId <= 0) {
+            $this->scheduleRetry();
             $this->SetStatus(104);
             return;
         }
@@ -34,12 +37,52 @@ class XSenseMQTTKonfigurator extends IPSModule
             $parentStatus = 0;
         }
         if ($parentStatus !== 102) {
+            $this->scheduleRetry();
             $this->SetStatus(104);
             return;
         }
 
+        $this->SetTimerInterval('RetryConnect', 0);
+        $this->WriteAttributeInteger('RetryTries', 0);
         $this->SetStatus(102);
         $this->SetReceiveDataFilter('.*\/config.*');
+    }
+
+    public function RetryConnect(): void
+    {
+        $parentId = $this->getParentId();
+        if ($parentId > 0) {
+            $status = 0;
+            try {
+                $status = (int)(@IPS_GetInstance($parentId)['InstanceStatus'] ?? 0);
+            } catch (Throwable $e) {
+                $status = 0;
+            }
+            if ($status === 102) {
+                $this->SetTimerInterval('RetryConnect', 0);
+                $this->WriteAttributeInteger('RetryTries', 0);
+                $this->ApplyChanges();
+                return;
+            }
+        }
+
+        $tries = $this->ReadAttributeInteger('RetryTries');
+        if ($tries >= 12) {
+            $this->SetTimerInterval('RetryConnect', 0);
+            return;
+        }
+        $this->WriteAttributeInteger('RetryTries', $tries + 1);
+        $this->SetTimerInterval('RetryConnect', 1000);
+    }
+
+    private function scheduleRetry(): void
+    {
+        $tries = $this->ReadAttributeInteger('RetryTries');
+        if ($tries >= 12) {
+            $this->SetTimerInterval('RetryConnect', 0);
+            return;
+        }
+        $this->SetTimerInterval('RetryConnect', 1000);
     }
 
     public function ReceiveData($JSONString): string
