@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-class XSenseMQTTBridge extends IPSModule
+class XSenseMQTTBridge extends IPSModuleStrict
 {
     private const MQTT_SERVER_GUID = '{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}';
     private const MQTT_DATA_GUID = '{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}';
@@ -46,7 +46,7 @@ class XSenseMQTTBridge extends IPSModule
         $this->subscribeTopic($root . '/+/+/state');
     }
 
-    public function ReceiveData($JSONString): string
+    public function ReceiveData(string $JSONString): string
     {
         $data = json_decode($JSONString, true);
         if (!is_array($data) || ($data['DataID'] ?? '') !== self::MQTT_DATA_GUID) {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-class XSenseMQTTKonfigurator extends IPSModule
+class XSenseMQTTKonfigurator extends IPSModuleStrict
 {
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
     private const BRIDGE_DATA_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}';
@@ -117,7 +117,7 @@ class XSenseMQTTKonfigurator extends IPSModule
         $this->SetTimerInterval('RetryConnect', 1000);
     }
 
-    public function ReceiveData($JSONString): string
+    public function ReceiveData(string $JSONString): string
     {
         $data = json_decode($JSONString, true);
         if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_DATA_GUID) {
@@ -201,11 +201,6 @@ class XSenseMQTTKonfigurator extends IPSModule
                         ['caption' => 'Entities', 'name' => 'entities', 'width' => 'auto']
                     ],
                     'values'  => $values
-                ],
-                [
-                    'type'    => 'CheckBox',
-                    'name'    => 'Debug',
-                    'caption' => 'Debug'
                 ]
             ],
             'status'  => [
@@ -268,7 +263,7 @@ class XSenseMQTTKonfigurator extends IPSModule
         }
     }
 
-    public function Destroy()
+    public function Destroy(): void
     {
         //Never delete this line!
         parent::Destroy();
@@ -438,8 +433,9 @@ class XSenseMQTTKonfigurator extends IPSModule
         $values = [];
         foreach ($devices as $device) {
             $instanceId = $this->findDeviceInstance($device['id']);
+            $name = $this->formatInstanceName((string)$device['name']);
             $values[] = [
-                'name'      => $device['name'],
+                'name'      => $name,
                 'deviceId'  => $device['id'],
                 'model'     => $device['model'],
                 'entities'  => implode(', ', $device['entities']),
@@ -451,6 +447,22 @@ class XSenseMQTTKonfigurator extends IPSModule
             ];
         }
         return $values;
+    }
+
+    private function formatInstanceName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return $name;
+        }
+        $pos = strpos($name, '(');
+        if ($pos === false || $pos === 0) {
+            return $name;
+        }
+        if ($name[$pos - 1] === ' ') {
+            return $name;
+        }
+        return substr($name, 0, $pos) . ' ' . substr($name, $pos);
     }
 
     private function debug(string $message, string $data): void

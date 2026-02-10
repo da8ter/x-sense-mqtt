@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-class XSenseMQTTdevice extends IPSModule
+class XSenseMQTTDevice extends IPSModuleStrict
 {
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
     private const BRIDGE_DATA_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}';
@@ -19,7 +19,7 @@ class XSenseMQTTdevice extends IPSModule
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
 
-    public function MessageSink($TimeStamp, $SenderID, $Message, $Data): void
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
     {
         if ($Message === IPS_KERNELMESSAGE && $Data[0] === KR_READY) {
             $this->ApplyChanges();
@@ -123,7 +123,7 @@ class XSenseMQTTdevice extends IPSModule
         return 0;
     }
 
-    public function ReceiveData($JSONString): string
+    public function ReceiveData(string $JSONString): string
     {
         $data = json_decode($JSONString, true);
         if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_DATA_GUID) {
