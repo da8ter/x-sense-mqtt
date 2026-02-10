@@ -6,7 +6,7 @@
     "vendor": "Stephan Sprick",
     "parentRequirements": ["{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
     "childRequirements": [],
-    "implemented": ["{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}"],
+    "implemented": ["{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}"],
     "prefix": "XSND",
     "url": "https://github.com/da8ter/x-sense-mqtt"
 }

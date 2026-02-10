@@ -5,7 +5,8 @@ declare(strict_types=1);
 class XSenseMQTTDevice extends IPSModuleStrict
 {
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
-    private const BRIDGE_DATA_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}';
+    private const BRIDGE_TX_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}'; // Device→Bridge
+    private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Device
 
     public function Create(): void
     {
@@ -126,7 +127,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
     public function ReceiveData(string $JSONString): string
     {
         $data = json_decode($JSONString, true);
-        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_DATA_GUID) {
+        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_RX_GUID) {
             return '';
         }
 

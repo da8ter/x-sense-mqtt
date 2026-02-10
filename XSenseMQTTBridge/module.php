@@ -6,7 +6,8 @@ class XSenseMQTTBridge extends IPSModuleStrict
 {
     private const MQTT_SERVER_GUID = '{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}';
     private const MQTT_DATA_GUID = '{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}';
-    private const BRIDGE_DATA_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}';
+    private const BRIDGE_TX_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}'; // Device→Bridge (ForwardData)
+    private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Device (SendDataToChildren)
 
     public function Create(): void
     {
@@ -14,6 +15,8 @@ class XSenseMQTTBridge extends IPSModuleStrict
         $this->RegisterPropertyString('TopicRoot', 'homeassistant/binary_sensor');
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('DiscoveryCache', '{}');
+        $this->RegisterAttributeInteger('RetryCount', 0);
+        $this->RegisterTimer('RetryActivate', 0, 'XSNB_RetryActivate($_IPS[\'TARGET\']);');
     }
 
     public function ApplyChanges(): void
@@ -30,20 +33,45 @@ class XSenseMQTTBridge extends IPSModuleStrict
         }
 
         if ($connID === 0) {
+            $this->scheduleRetry();
             $this->SetStatus(104);
             return;
         }
 
         if (!$this->HasActiveParent()) {
+            $this->scheduleRetry();
             $this->SetStatus(104);
             return;
         }
 
+        $this->SetTimerInterval('RetryActivate', 0);
+        $this->WriteAttributeInteger('RetryCount', 0);
         $this->SetStatus(102);
         $root = $this->normalizeTopicRoot($this->ReadPropertyString('TopicRoot'));
         $this->SetSummary($root);
         $this->subscribeTopic($root . '/+/+/config');
         $this->subscribeTopic($root . '/+/+/state');
+    }
+
+    public function RetryActivate(): void
+    {
+        $count = $this->ReadAttributeInteger('RetryCount');
+        if ($count >= 10) {
+            $this->SetTimerInterval('RetryActivate', 0);
+            return;
+        }
+        $this->WriteAttributeInteger('RetryCount', $count + 1);
+        $this->ApplyChanges();
+    }
+
+    private function scheduleRetry(): void
+    {
+        $count = $this->ReadAttributeInteger('RetryCount');
+        if ($count >= 10) {
+            $this->SetTimerInterval('RetryActivate', 0);
+            return;
+        }
+        $this->SetTimerInterval('RetryActivate', 500);
     }
 
     public function ReceiveData(string $JSONString): string
@@ -71,7 +99,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
         }
 
         $bridgeData = [
-            'DataID' => self::BRIDGE_DATA_GUID,
+            'DataID' => self::BRIDGE_RX_GUID,
             'Topic' => $topic,
             'Payload' => $payload
         ];
@@ -86,14 +114,28 @@ class XSenseMQTTBridge extends IPSModuleStrict
         return json_encode(['type' => 'connect', 'moduleIDs' => [self::MQTT_SERVER_GUID]]);
     }
 
+    public function ForwardData(string $JSONString): string
+    {
+        $data = json_decode($JSONString, true);
+        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_TX_GUID) {
+            return '';
+        }
+        return '';
+    }
+
     public function ForwardToChildren(string $topic, string $payload): void
     {
         $bridgeData = [
-            'DataID' => self::BRIDGE_DATA_GUID,
+            'DataID' => self::BRIDGE_RX_GUID,
             'Topic' => $topic,
             'Payload' => $payload
         ];
         $this->SendDataToChildren(json_encode($bridgeData));
+    }
+
+    public function GetDiscoveryCache(): string
+    {
+        return $this->ReadAttributeString('DiscoveryCache');
     }
 
     public function ReplayDiscovery(string $deviceId = ''): void

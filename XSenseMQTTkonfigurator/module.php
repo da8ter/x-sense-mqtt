@@ -5,7 +5,7 @@ declare(strict_types=1);
 class XSenseMQTTKonfigurator extends IPSModuleStrict
 {
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
-    private const BRIDGE_DATA_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}';
+    private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Konfigurator (not used anymore)
     private const DEVICE_MODULE_GUID = '{C523B0B6-870E-9726-778A-0FF5C6E9656E}';
 
     public function Create(): void
@@ -21,106 +21,35 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
-        $this->SetReceiveDataFilter('.*');
-
-        $parentId = $this->getParentId();
-        if ($parentId <= 0) {
-            $this->scheduleRetry();
+        $bridgeId = $this->getBridgeId();
+        if ($bridgeId <= 0) {
             $this->SetStatus(104);
             return;
         }
 
-        $parentStatus = 0;
+        $bridgeStatus = 0;
         try {
-            $parentStatus = (int)(@IPS_GetInstance($parentId)['InstanceStatus'] ?? 0);
+            $bridgeStatus = (int)(@IPS_GetInstance($bridgeId)['InstanceStatus'] ?? 0);
         } catch (Throwable $e) {
-            $parentStatus = 0;
+            $bridgeStatus = 0;
         }
-        if ($parentStatus !== 102) {
-            $this->scheduleRetry();
+        if ($bridgeStatus !== 102) {
             $this->SetStatus(104);
             return;
         }
 
-        $this->SetTimerInterval('RetryConnect', 0);
-        $this->WriteAttributeInteger('RetryTries', 0);
         $this->SetStatus(102);
-        $this->SetReceiveDataFilter('.*\/config.*');
     }
 
     public function RetryConnect(): void
     {
-        $parentId = $this->getParentId();
-        if ($parentId <= 0) {
-            $parentId = $this->autoConnectToBridge();
-        }
-        if ($parentId > 0) {
-            $status = 0;
-            try {
-                $status = (int)(@IPS_GetInstance($parentId)['InstanceStatus'] ?? 0);
-            } catch (Throwable $e) {
-                $status = 0;
-            }
-            if ($status === 102) {
-                $this->SetTimerInterval('RetryConnect', 0);
-                $this->WriteAttributeInteger('RetryTries', 0);
-                $this->ApplyChanges();
-                return;
-            }
-        }
-
-        $tries = $this->ReadAttributeInteger('RetryTries');
-        if ($tries >= 12) {
-            $this->SetTimerInterval('RetryConnect', 0);
-            return;
-        }
-        $this->WriteAttributeInteger('RetryTries', $tries + 1);
-        $this->SetTimerInterval('RetryConnect', 1000);
-    }
-
-    private function autoConnectToBridge(): int
-    {
-        $active = [];
-        foreach (IPS_GetInstanceListByModuleID(self::BRIDGE_MODULE_GUID) as $id) {
-            $status = 0;
-            try {
-                $status = (int)(@IPS_GetInstance($id)['InstanceStatus'] ?? 0);
-            } catch (Throwable $e) {
-                $status = 0;
-            }
-            if ($status === 102) {
-                $active[] = $id;
-            }
-        }
-
-        if (count($active) !== 1) {
-            return 0;
-        }
-
-        $target = (int)$active[0];
-        @IPS_ConnectInstance($this->InstanceID, $target);
-
-        $parentId = $this->getParentId();
-        if ($parentId === $target) {
-            return $parentId;
-        }
-        return 0;
-    }
-
-    private function scheduleRetry(): void
-    {
-        $tries = $this->ReadAttributeInteger('RetryTries');
-        if ($tries >= 12) {
-            $this->SetTimerInterval('RetryConnect', 0);
-            return;
-        }
-        $this->SetTimerInterval('RetryConnect', 1000);
+        // Legacy - not used anymore
     }
 
     public function ReceiveData(string $JSONString): string
     {
         $data = json_decode($JSONString, true);
-        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_DATA_GUID) {
+        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_RX_GUID) {
             return '';
         }
 
@@ -211,10 +140,6 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         return json_encode($form);
     }
 
-    public function GetCompatibleParents(): string
-    {
-        return json_encode(['type' => 'connect', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
-    }
 
     public function SyncDiscoveryToDevices(): void
     {
@@ -353,10 +278,22 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         return $values[count($values) - 1];
     }
 
-    private function getParentId(): int
+    private function getBridgeId(): int
     {
-        $inst = @IPS_GetInstance($this->InstanceID);
-        return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
+        $bridges = @IPS_GetInstanceListByModuleID(self::BRIDGE_MODULE_GUID);
+        if (!is_array($bridges) || empty($bridges)) {
+            return 0;
+        }
+        foreach ($bridges as $bridgeId) {
+            if (@IPS_InstanceExists($bridgeId)) {
+                $status = (int)(@IPS_GetInstance($bridgeId)['InstanceStatus'] ?? 0);
+                if ($status === 102) {
+                    return $bridgeId;
+                }
+            }
+        }
+        // Return first bridge even if not active
+        return (int)$bridges[0];
     }
 
     private function updateCache(string $uniqueId, array $entry): void
@@ -381,9 +318,39 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
     private function readCache(): array
     {
-        $raw = $this->ReadAttributeString('DiscoveryCache');
-        $cache = json_decode($raw, true);
-        return is_array($cache) ? $cache : [];
+        // Read discovery cache from Bridge instance
+        $bridgeId = $this->getBridgeId();
+        if ($bridgeId <= 0) {
+            return [];
+        }
+        // Get discovery cache from Bridge via public method
+        $raw = @XSNB_GetDiscoveryCache($bridgeId);
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+        // Bridge stores topic => payload, convert to unique_id => parsed entry
+        $bridgeCache = json_decode($raw, true);
+        if (!is_array($bridgeCache)) {
+            return [];
+        }
+        $result = [];
+        foreach ($bridgeCache as $topic => $payload) {
+            if (!is_string($payload) || $payload === '') {
+                continue;
+            }
+            $entry = json_decode($payload, true);
+            if (!is_array($entry)) {
+                continue;
+            }
+            $uniqueId = (string)($entry['unique_id'] ?? '');
+            if ($uniqueId === '') {
+                $uniqueId = $this->getTopicToken($topic, 2);
+            }
+            if ($uniqueId !== '') {
+                $result[$uniqueId] = $entry;
+            }
+        }
+        return $result;
     }
 
     private function findDeviceInstance(string $deviceId): int
