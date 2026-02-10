@@ -335,11 +335,13 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     {
         // Read discovery cache from Bridge instance
         $bridgeId = $this->getBridgeId();
+        $this->debug('readCache', sprintf('BridgeId=%d', $bridgeId));
         if ($bridgeId <= 0) {
             return [];
         }
         // Get discovery cache from Bridge via public method
         $raw = @XSNB_GetDiscoveryCache($bridgeId);
+        $this->debug('readCache', sprintf('Raw cache length=%d', is_string($raw) ? strlen($raw) : -1));
         if (!is_string($raw) || $raw === '') {
             return [];
         }
