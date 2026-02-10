@@ -117,9 +117,17 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
+        $bridgeId = $this->getBridgeId();
+        $cacheCount = count($this->readCache());
+        $bridgeInfo = $bridgeId > 0 ? sprintf('Bridge #%d, Cache: %d Einträge', $bridgeId, $cacheCount) : 'Keine Bridge gefunden';
+        
         $values = $this->buildDeviceValues();
         $form = [
             'elements' => [
+                [
+                    'type'    => 'Label',
+                    'caption' => $bridgeInfo
+                ],
                 [
                     'type'    => 'Configurator',
                     'caption' => 'Devices',
@@ -132,12 +140,30 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                     'values'  => $values
                 ]
             ],
+            'actions' => [
+                [
+                    'type'    => 'Button',
+                    'caption' => 'Cache aktualisieren',
+                    'onClick' => 'IPS_RequestAction($_IPS[\'TARGET\'], "RefreshCache", true);'
+                ]
+            ],
             'status'  => [
                 ['code' => 102, 'icon' => 'active', 'caption' => 'Active'],
                 ['code' => 104, 'icon' => 'inactive', 'caption' => 'No Bridge connected']
             ]
         ];
         return json_encode($form);
+    }
+    
+    public function RequestAction(string $Ident, mixed $Value): void
+    {
+        if ($Ident === 'RefreshCache') {
+            $bridgeId = $this->getBridgeId();
+            if ($bridgeId > 0) {
+                @XSNB_ReplayDiscovery($bridgeId, '');
+            }
+            $this->ReloadForm();
+        }
     }
 
 
