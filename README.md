@@ -1,6 +1,6 @@
-# X-Sense MQTT (IP-Symcon)
+# X-Sense MQTT Integration für Symcon
 
-Dieses Repository enthält Module zur Integration von X-Sense Geräten über MQTT (Home Assistant MQTT Discovery) in IP-Symcon.
+Module zur Integration von X-Sense Geräten über MQTT in Symcon.
 
 ## Inhaltsverzeichnis
 
@@ -19,18 +19,18 @@ Dieses Repository enthält Module zur Integration von X-Sense Geräten über MQT
 
 ## 2. Voraussetzungen
 
-- IP-Symcon ab Version 7.1
+- IP-Symcon ab Version 8.1
 - Konfigurierter MQTT Server in IP-Symcon
-- X-Sense Geräte/Bridge, die Home Assistant MQTT Discovery publiziert
+- X-Sense Bridge, die Home Assistant MQTT Discovery publiziert
 
 ## 3. Enthaltene Module
 
 - `XSenseMQTTBridge` (Splitter)
-  - README: `XSenseMQTTBridge/README.md`
+  - README: `https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTBridge/README.md`
 - `XSenseMQTTkonfigurator` (Konfigurator)
-  - README: `XSenseMQTTkonfigurator/README.md`
+  - README: `https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTkonfigurator/README.md`
 - `XSenseMQTTdevice` (Device)
-  - README: `XSenseMQTTdevice/README.md`
+  - README: `https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTdevice/README.md`
 
 ## 4. Einrichten der Instanzen in IP-Symcon
 
