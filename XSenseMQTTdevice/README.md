@@ -37,7 +37,6 @@ __Konfigurationsseite__:
 Name | Beschreibung
 -----|-------------
 Device ID | Gerätekennung aus dem Discovery Topic bzw. `device.identifiers[0]`
-Create unknown entities | Unbekannte Suffixe als Bool-Variable anlegen
 Debug | Erweiterte Debug-Ausgaben im Meldungslog aktivieren
 
 ### 5. Statusvariablen und Darstellungen
@@ -54,7 +53,7 @@ Model | string | Wertanzeige | Modell
 Firmware | string | Wertanzeige | Firmware-Version
 LastSeen | integer | Datum/Uhrzeit | Zeitpunkt der letzten gültigen Statusnachricht
 
-Unbekannte Entities werden automatisch angelegt, wenn *Create unknown entities* aktiviert ist. Der Variablenname wird aus dem Config-Feld `name` übernommen, der Ident aus `device_class` oder dem sanitisierten Namen. Der Variablentyp wird aus der Config abgeleitet: Boolean wenn `payload_on`/`payload_off` vorhanden, sonst String.
+Entity-Variablen werden automatisch aus der MQTT Discovery-Config angelegt. Der Variablenname wird aus dem Config-Feld `name` übernommen, der Ident aus `device_class` oder dem sanitisierten Namen. Boolean-Variablen erhalten eine Wertanzeige mit dem `payload_on`/`payload_off`-Text als Beschriftung (z.B. "Cleared", "Online").
 
 ### 6. Visualisierung
 

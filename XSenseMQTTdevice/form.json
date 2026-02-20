@@ -7,11 +7,6 @@
         },
         {
             "type": "CheckBox",
-            "name": "CreateUnknownEntities",
-            "caption": "Create unknown entities"
-        },
-        {
-            "type": "CheckBox",
             "name": "Debug",
             "caption": "Debug"
         }

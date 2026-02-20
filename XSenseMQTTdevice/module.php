@@ -15,7 +15,6 @@ class XSenseMQTTDevice extends IPSModuleStrict
     {
         parent::Create();
         $this->RegisterPropertyString('DeviceId', '');
-        $this->RegisterPropertyBoolean('CreateUnknownEntities', true);
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('Entities', '{}');
         $this->RegisterAttributeInteger('AutoConnectTries', 0);
@@ -571,9 +570,6 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $map = $this->getSuffixMap();
         if (isset($map[$suffix])) {
             return $map[$suffix]['ident'];
-        }
-        if (!$this->ReadPropertyBoolean('CreateUnknownEntities')) {
-            return '';
         }
         $deviceClass = (string)($entry['device_class'] ?? '');
         if ($deviceClass !== '') {
