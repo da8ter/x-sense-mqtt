@@ -13,7 +13,9 @@
             "No Bridge connected": "Keine Bridge verbunden",
             "Debug": "Debug",
             "ReceiveData": "Empfangene Daten",
-            "Topic=%s": "Topic=%s"
+            "Topic=%s": "Topic=%s",
+            "Donations / Gifts": "Spenden / Geschenke",
+            "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:"
         },
         "en": {
             "Devices": "Devices",
@@ -28,7 +30,9 @@
             "No Bridge connected": "No Bridge connected",
             "Debug": "Debug",
             "ReceiveData": "Receive data",
-            "Topic=%s": "Topic=%s"
+            "Topic=%s": "Topic=%s",
+            "Donations / Gifts": "Donations / Gifts",
+            "Say thank you and support the developer of this module:": "Say thank you and support the developer of this module:"
         }
     }
 }

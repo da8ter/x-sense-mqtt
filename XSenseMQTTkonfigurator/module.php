@@ -48,41 +48,16 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+
         $bridgeId = $this->getBridgeId();
         $cacheCount = count($this->readCache());
-        $bridgeInfo = $bridgeId > 0
+        $form['elements'][0]['caption'] = $bridgeId > 0
             ? sprintf($this->t('Bridge #%d, Cache: %d entries'), $bridgeId, $cacheCount)
             : $this->t('No Bridge found');
-        
-        $values = $this->buildDeviceValues();
-        $form = [
-            'elements' => [
-                [
-                    'type'    => 'Label',
-                    'caption' => $bridgeInfo
-                ],
-                [
-                    'type'    => 'CheckBox',
-                    'name'    => 'Debug',
-                    'caption' => 'Debug'
-                ],
-                [
-                    'type'    => 'Configurator',
-                    'caption' => 'Devices',
-                    'columns' => [
-                        ['caption' => 'Name', 'name' => 'name', 'width' => '250px'],
-                        ['caption' => 'Device ID', 'name' => 'deviceId', 'width' => '200px'],
-                        ['caption' => 'Model', 'name' => 'model', 'width' => '120px'],
-                        ['caption' => 'Entities', 'name' => 'entities', 'width' => 'auto']
-                    ],
-                    'values'  => $values
-                ]
-            ]
-            'status'  => [
-                ['code' => 102, 'icon' => 'active', 'caption' => 'Active'],
-                ['code' => 104, 'icon' => 'inactive', 'caption' => 'No Bridge connected']
-            ]
-        ];
+
+        $form['elements'][2]['values'] = $this->buildDeviceValues();
+
         return json_encode($form);
     }
     
