@@ -23,7 +23,9 @@
             "DeviceId mismatch": "Geräte-ID stimmt nicht überein",
             "unique_id/state_topic missing": "unique_id/state_topic fehlt",
             "Invalid JSON payload": "Ungültiges JSON-Payload",
-            "Unknown status for %s: %s": "Unbekannter Status für %s: %s"
+            "Unknown status for %s: %s": "Unbekannter Status für %s: %s",
+            "Donations / Gifts": "Spenden / Geschenke",
+            "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:"
         },
         "en": {
             "Manufacturer": "Manufacturer",
@@ -48,7 +50,9 @@
             "DeviceId mismatch": "Device ID mismatch",
             "unique_id/state_topic missing": "unique_id/state_topic missing",
             "Invalid JSON payload": "Invalid JSON payload",
-            "Unknown status for %s: %s": "Unknown status for %s: %s"
+            "Unknown status for %s: %s": "Unknown status for %s: %s",
+            "Donations / Gifts": "Donations / Gifts",
+            "Say thank you and support the developer of this module:": "Say thank you and support the developer of this module:"
         }
     }
 }

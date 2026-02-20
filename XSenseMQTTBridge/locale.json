@@ -4,13 +4,17 @@
             "Topic root": "Topic-Root",
             "Debug": "Debug-Modus",
             "Topic=%s": "Topic=%s",
-            "ReceiveData": "Daten empfangen"
+            "ReceiveData": "Daten empfangen",
+            "Donations / Gifts": "Spenden / Geschenke",
+            "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:"
         },
         "en": {
             "Topic root": "Topic root",
             "Debug": "Debug mode",
             "Topic=%s": "Topic=%s",
-            "ReceiveData": "Receive data"
+            "ReceiveData": "Receive data",
+            "Donations / Gifts": "Donations / Gifts",
+            "Say thank you and support the developer of this module:": "Say thank you and support the developer of this module:"
         }
     }
 }
