@@ -77,14 +77,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                     ],
                     'values'  => $values
                 ]
-            ],
-            'actions' => [
-                [
-                    'type'    => 'Button',
-                    'caption' => $this->t('Refresh cache'),
-                    'onClick' => 'IPS_RequestAction($id, "RefreshCache", true);'
-                ]
-            ],
+            ]
             'status'  => [
                 ['code' => 102, 'icon' => 'active', 'caption' => 'Active'],
                 ['code' => 104, 'icon' => 'inactive', 'caption' => 'No Bridge connected']
