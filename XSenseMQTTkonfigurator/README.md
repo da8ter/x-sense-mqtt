@@ -10,13 +10,14 @@ Dieses Modul stellt die gefundenen X-Sense Geräte in einer Liste dar, über die
 5. [Statusvariablen und Profile](#5-statusvariablen-und-profile)
 6. [Visualisierung](#6-visualisierung)
 7. [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
-8. [MQTT-Discovery Beispiele](#8-mqtt-discovery-beispiele)
+8. [Versionshistorie](#8-versionshistorie)
+9. [MQTT-Discovery Beispiele](#9-mqtt-discovery-beispiele)
 
 ### 1. Funktionsumfang
 
-- Abonniert `homeassistant/binary_sensor/+/+/config`
-- Baut einen Discovery-Cache pro `unique_id`
-- Zeigt Geräte in einer Konfigurator-Liste an und ermöglicht das manuelle Erstellen von Device-Instanzen
+- Liest den Discovery-Cache der Bridge aus
+- Zeigt gefundene Geräte in einer Konfigurator-Liste an
+- Ermöglicht das manuelle Erstellen von Device-Instanzen
 
 ### 2. Voraussetzungen
 
@@ -34,16 +35,15 @@ https://github.com/da8ter/x-sense-mqtt.git
 Unter „Instanz hinzufügen“ kann das Modul per Schnellfilter gefunden werden.
 
 1. `X Sense MQTT Konfigurator`-Instanz anlegen
-2. Als Gateway die `X Sense MQTT Bridge` auswählen
-3. Konfigurationsseite öffnen
+2. Konfigurationsseite öffnen
 
-Wenn Discovery-Configs empfangen werden, erscheinen die Geräte in der Liste. Über die Liste können `X Sense MQTT Device`-Instanzen manuell erstellt werden.
+Wenn Discovery-Configs empfangen werden, erscheinen die Geräte in der Liste. Über die Liste können `X Sense MQTT Device`-Instanzen manuell erstellt werden. Dabei verbindet sich das Device automatisch mit der vorhandenen Bridge und liest deren Discovery-Cache, um Variablen anzulegen.
 
 __Konfigurationsseite__:
 
 Name | Beschreibung
 -----|-------------
-Keine weiteren Einstellungen.
+Debug | Erweiterte Debug-Ausgaben im Meldungslog aktivieren
 
 ### 5. Statusvariablen und Profile
 
@@ -59,7 +59,12 @@ Das Modul stellt keine eigene Visualisierung bereit.
 
 Überträgt den aktuellen Discovery-Cache an bestehende Device-Instanzen.
 
-### 8. MQTT-Discovery Beispiele
+### 8. Versionshistorie
+
+- 1.1: Eigener Cache entfernt, liest jetzt Bridge-Cache
+- 1.0: Initiale Version
+
+### 9. MQTT-Discovery Beispiele
 
 **Config Topic**:
 `homeassistant/binary_sensor/{deviceId}/{uniqueId}/config`

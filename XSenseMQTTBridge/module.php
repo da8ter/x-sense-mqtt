@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../libs/XSenseMQTTHelper.php';
+
 class XSenseMQTTBridge extends IPSModuleStrict
 {
+    use XSenseMQTTHelper;
     private const MQTT_SERVER_GUID = '{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}';
     private const MQTT_DATA_GUID = '{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}';
     private const BRIDGE_TX_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}'; // Device→Bridge (ForwardData)
@@ -12,7 +15,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
     public function Create(): void
     {
         parent::Create();
-        $this->RegisterPropertyString('TopicRoot', 'homeassistant/binary_sensor');
+        $this->RegisterPropertyString('TopicRoot', 'homeassistant');
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('DiscoveryCache', '{}');
         $this->RegisterAttributeInteger('RetryCount', 0);
@@ -49,8 +52,8 @@ class XSenseMQTTBridge extends IPSModuleStrict
         $this->SetStatus(102);
         $root = $this->normalizeTopicRoot($this->ReadPropertyString('TopicRoot'));
         $this->SetSummary($root);
-        $this->subscribeTopic($root . '/+/+/config');
-        $this->subscribeTopic($root . '/+/+/state');
+        $this->subscribeTopic($root . '/+/+/+/config');
+        $this->subscribeTopic($root . '/+/+/+/state');
     }
 
     public function RetryActivate(): void
@@ -144,7 +147,9 @@ class XSenseMQTTBridge extends IPSModuleStrict
 
     public function GetDiscoveryCache(): string
     {
-        return $this->ReadAttributeString('DiscoveryCache');
+        $cache = $this->ReadAttributeString('DiscoveryCache');
+        $this->debug('GetDiscoveryCache', sprintf('Returning cache length=%d', strlen($cache)));
+        return $cache;
     }
 
     public function ReplayDiscovery(string $deviceId = ''): void
@@ -215,38 +220,6 @@ class XSenseMQTTBridge extends IPSModuleStrict
         return $ident !== '' && strcasecmp($ident, $deviceId) === 0;
     }
 
-    private function getDeviceIdentifier(array $device): string
-    {
-        if (!isset($device['identifiers'])) {
-            return '';
-        }
-        $identifiers = $device['identifiers'];
-        if (is_string($identifiers)) {
-            return trim($identifiers);
-        }
-        if (is_array($identifiers)) {
-            $first = $identifiers[0] ?? '';
-            if (is_string($first)) {
-                return trim($first);
-            }
-            if (is_array($first)) {
-                $flat = $first[0] ?? '';
-                return is_string($flat) ? trim($flat) : '';
-            }
-        }
-        return '';
-    }
-
-    private function getTopicToken(string $topic, int $fromEnd): string
-    {
-        $parts = explode('/', trim($topic, '/'));
-        $index = count($parts) - $fromEnd;
-        if ($index >= 0 && $index < count($parts)) {
-            return (string)$parts[$index];
-        }
-        return '';
-    }
-
     private function subscribeTopic(string $topic): void
     {
         $parentId = $this->getParentId();
@@ -264,20 +237,4 @@ class XSenseMQTTBridge extends IPSModuleStrict
         return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
     }
 
-    private function debug(string $message, string $data): void
-    {
-        try {
-            if (!$this->ReadPropertyBoolean('Debug')) {
-                return;
-            }
-        } catch (Throwable $e) {
-            return;
-        }
-        parent::SendDebug($this->t($message), $data, 0);
-    }
-
-    private function t(string $text): string
-    {
-        return method_exists($this, 'Translate') ? $this->Translate($text) : $text;
-    }
 }

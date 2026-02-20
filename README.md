@@ -35,9 +35,9 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 ## 4. Einrichten der Instanzen in IP-Symcon
 
 1. MQTT-Server-Instanz in IP-Symcon erstellen
-2. In der X-Sense App in der Bridge Konfiguration den Punkt "Mit Home Assistant verbinden" entsprechent konfigurieren. 
-3. `X-Sense MQTT Bridge` anlegen und und als Schnittstelle den MQTT-Server verwenden
-4. `X-Sense MQTT Konfigurator` anlegen und als Gateway die XSenseMQTTBridge verwenden
+2. `X-Sense MQTT Bridge` anlegen und und als Schnittstelle den MQTT-Server verwenden
+3. `X-Sense MQTT Konfigurator` anlegen und als Gateway die XSenseMQTTBridge verwenden
+4. In der X-Sense App in der Bridge Konfiguration den Punkt "Mit Home Assistant verbinden" entsprechend konfigurieren
 5. Im Konfigurator werden gefundene Geräte gelistet; darüber werden `X-Sense MQTT Device`-Instanzen angelegt. Falls keine Geräte angezeigt werden bitte die Home Assistant unterstützung in der X-Sense App kurz ausschalten und wieder einschalten. Danach sollten aktuelle Informationen von den X-Sense Geräten gesendet werden.
 
 ## Installation (Repository)
@@ -58,7 +58,3 @@ X-Sense MQTT Konfigurator (Konfigurator)
     ↓
 X-Sense MQTT Device (Device)
 ```
-
-## 6. Versionshistorie
-
-- 0.1: Initiale Version

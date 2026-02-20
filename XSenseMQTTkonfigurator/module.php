@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../libs/XSenseMQTTHelper.php';
+
 class XSenseMQTTKonfigurator extends IPSModuleStrict
 {
+    use XSenseMQTTHelper;
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
     private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Konfigurator (not used anymore)
     private const DEVICE_MODULE_GUID = '{C523B0B6-870E-9726-778A-0FF5C6E9656E}';
@@ -12,9 +15,6 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     {
         parent::Create();
         $this->RegisterPropertyBoolean('Debug', false);
-        $this->RegisterAttributeString('DiscoveryCache', '{}');
-        $this->RegisterAttributeInteger('RetryTries', 0);
-        $this->RegisterTimer('RetryConnect', 0, 'XSNK_RetryConnect($_IPS[\'TARGET\']);');
     }
 
     public function ApplyChanges(): void
@@ -30,11 +30,6 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         $this->SetStatus(102);
     }
 
-    public function RetryConnect(): void
-    {
-        // Legacy - not used anymore
-    }
-
     public function ReceiveData(string $JSONString): string
     {
         $data = json_decode($JSONString, true);
@@ -43,64 +38,11 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         }
 
         $topic = (string)($data['Topic'] ?? '');
-        if ($topic === '') {
+        if ($topic === '' || !$this->isConfigTopic($topic)) {
             return '';
         }
 
-        $payload = $this->decodePayload($data['Payload'] ?? '');
-        $this->debug('ReceiveData', sprintf($this->t('Topic=%s Payload=%s'), $topic, $payload));
-
-        if (!$this->isConfigTopic($topic)) {
-            return '';
-        }
-
-        if ($payload === '') {
-            $this->removeEntityByTopic($topic);
-            return '';
-        }
-
-        $cfg = json_decode($payload, true);
-        if (!is_array($cfg)) {
-            $this->debug('Config', $this->t('Invalid JSON'));
-            return '';
-        }
-
-        $uniqueId = trim((string)($cfg['unique_id'] ?? $this->getTopicToken($topic, 2)));
-        $device = isset($cfg['device']) && is_array($cfg['device']) ? $cfg['device'] : [];
-        $deviceId = $this->getTopicToken($topic, 3);
-        if ($deviceId === '') {
-            $deviceId = $this->getDeviceIdentifier($device);
-        }
-        if ($uniqueId === '' || $deviceId === '') {
-            $this->debug('Config', $this->t('unique_id/deviceId missing'));
-            return '';
-        }
-
-        $stateTopic = trim((string)($cfg['state_topic'] ?? ''));
-        if ($stateTopic === '') {
-            $this->debug('Config', $this->t('state_topic missing'));
-            return '';
-        }
-
-        $entry = [
-            'unique_id'      => $uniqueId,
-            'name'           => (string)($cfg['name'] ?? ''),
-            'state_topic'    => $stateTopic,
-            'payload_on'     => (string)($cfg['payload_on'] ?? ''),
-            'payload_off'    => (string)($cfg['payload_off'] ?? ''),
-            'value_template' => (string)($cfg['value_template'] ?? ''),
-            'suffix'         => $this->extractSuffix($uniqueId),
-            'device'         => [
-                'id'           => $deviceId,
-                'name'         => (string)($device['name'] ?? $deviceId),
-                'manufacturer' => (string)($device['manufacturer'] ?? ''),
-                'model'        => (string)($device['model'] ?? ''),
-                'sw_version'   => (string)($device['sw_version'] ?? '')
-            ]
-        ];
-
-        $this->updateCache($uniqueId, $entry);
-
+        $this->debug('ReceiveData', sprintf($this->t('Topic=%s'), $topic));
         return '';
     }
 
@@ -108,7 +50,9 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     {
         $bridgeId = $this->getBridgeId();
         $cacheCount = count($this->readCache());
-        $bridgeInfo = $bridgeId > 0 ? sprintf('Bridge #%d, Cache: %d Einträge', $bridgeId, $cacheCount) : 'Keine Bridge gefunden';
+        $bridgeInfo = $bridgeId > 0
+            ? sprintf($this->t('Bridge #%d, Cache: %d entries'), $bridgeId, $cacheCount)
+            : $this->t('No Bridge found');
         
         $values = $this->buildDeviceValues();
         $form = [
@@ -116,6 +60,11 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                 [
                     'type'    => 'Label',
                     'caption' => $bridgeInfo
+                ],
+                [
+                    'type'    => 'CheckBox',
+                    'name'    => 'Debug',
+                    'caption' => 'Debug'
                 ],
                 [
                     'type'    => 'Configurator',
@@ -132,7 +81,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
             'actions' => [
                 [
                     'type'    => 'Button',
-                    'caption' => 'Cache aktualisieren',
+                    'caption' => $this->t('Refresh cache'),
                     'onClick' => 'IPS_RequestAction($id, "RefreshCache", true);'
                 ]
             ],
@@ -209,90 +158,6 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         parent::Destroy();
     }
 
-    private function isConfigTopic(string $topic): bool
-    {
-        return str_ends_with($topic, '/config');
-    }
-
-    private function decodePayload($payload): string
-    {
-        if (!is_string($payload)) {
-            return '';
-        }
-        $payload = trim($payload);
-        if ($payload === '') {
-            return '';
-        }
-        if (ctype_xdigit($payload) && (strlen($payload) % 2 === 0)) {
-            $bin = hex2bin($payload);
-            if ($bin !== false) {
-                return $bin;
-            }
-        }
-        return $payload;
-    }
-
-    private function extractSuffix(string $uniqueId): string
-    {
-        $uniqueId = trim($uniqueId);
-        if ($uniqueId === '') {
-            return '';
-        }
-        foreach (['_', '-'] as $sep) {
-            $pos = strrpos($uniqueId, $sep);
-            if ($pos !== false) {
-                return strtolower(substr($uniqueId, $pos + 1));
-            }
-        }
-        return strtolower($uniqueId);
-    }
-
-    private function getTopicToken(string $topic, int $fromEnd): string
-    {
-        $parts = explode('/', trim($topic, '/'));
-        $index = count($parts) - $fromEnd;
-        if ($index >= 0 && $index < count($parts)) {
-            return (string)$parts[$index];
-        }
-        return '';
-    }
-
-    private function getDeviceIdentifier(array $device): string
-    {
-        if (!isset($device['identifiers'])) {
-            return '';
-        }
-        $identifiers = $device['identifiers'];
-        $values = [];
-        $add = function ($value) use (&$values): void {
-            if (is_string($value)) {
-                $value = trim($value);
-                if ($value !== '') {
-                    $values[] = $value;
-                }
-            }
-        };
-
-        if (is_string($identifiers)) {
-            $add($identifiers);
-        } elseif (is_array($identifiers)) {
-            foreach ($identifiers as $entry) {
-                if (is_array($entry)) {
-                    foreach ($entry as $nested) {
-                        $add($nested);
-                    }
-                } else {
-                    $add($entry);
-                }
-            }
-        }
-
-        if (empty($values)) {
-            return '';
-        }
-        return $values[count($values) - 1];
-    }
-
     private function getBridgeId(): int
     {
         $bridges = @IPS_GetInstanceListByModuleID(self::BRIDGE_MODULE_GUID);
@@ -311,41 +176,16 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         return (int)$bridges[0];
     }
 
-    private function updateCache(string $uniqueId, array $entry): void
-    {
-        $cache = $this->readCache();
-        $cache[$uniqueId] = $entry;
-        $this->WriteAttributeString('DiscoveryCache', json_encode($cache, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    }
-
-    private function removeEntityByTopic(string $topic): void
-    {
-        $uniqueId = $this->getTopicToken($topic, 2);
-        if ($uniqueId === '') {
-            return;
-        }
-        $cache = $this->readCache();
-        if (isset($cache[$uniqueId])) {
-            unset($cache[$uniqueId]);
-            $this->WriteAttributeString('DiscoveryCache', json_encode($cache, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        }
-    }
-
     private function readCache(): array
     {
-        // Read discovery cache from Bridge instance
         $bridgeId = $this->getBridgeId();
-        $this->debug('readCache', sprintf('BridgeId=%d', $bridgeId));
         if ($bridgeId <= 0) {
             return [];
         }
-        // Get discovery cache from Bridge via public method
         $raw = @XSNB_GetDiscoveryCache($bridgeId);
-        $this->debug('readCache', sprintf('Raw cache length=%d', is_string($raw) ? strlen($raw) : -1));
         if (!is_string($raw) || $raw === '') {
             return [];
         }
-        // Bridge stores topic => payload, convert to unique_id => parsed entry
         $bridgeCache = json_decode($raw, true);
         if (!is_array($bridgeCache)) {
             return [];
@@ -355,7 +195,8 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
             if (!is_string($payload) || $payload === '') {
                 continue;
             }
-            $entry = json_decode($payload, true);
+            $decoded = $this->decodePayload($payload);
+            $entry = json_decode($decoded, true);
             if (!is_array($entry)) {
                 continue;
             }
@@ -367,6 +208,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                 $result[$uniqueId] = $entry;
             }
         }
+        $this->debug('readCache', sprintf('Bridge #%d: %d entries', $bridgeId, count($result)));
         return $result;
     }
 
@@ -406,9 +248,17 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                     'entities' => []
                 ];
             }
-            $suffix = (string)($entry['suffix'] ?? '');
-            if ($suffix !== '' && !in_array($suffix, $devices[$deviceId]['entities'], true)) {
-                $devices[$deviceId]['entities'][] = $suffix;
+            // Extract entity type from unique_id (e.g., SBS50148995FA_00000001_online -> online)
+            $uniqueId = (string)($entry['unique_id'] ?? '');
+            $entityType = '';
+            if ($uniqueId !== '') {
+                $parts = explode('_', $uniqueId);
+                if (count($parts) >= 3) {
+                    $entityType = end($parts);
+                }
+            }
+            if ($entityType !== '' && !in_array($entityType, $devices[$deviceId]['entities'], true)) {
+                $devices[$deviceId]['entities'][] = $entityType;
             }
         }
 
@@ -418,16 +268,18 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         foreach ($devices as $device) {
             $instanceId = $this->findDeviceInstance($device['id']);
             $name = $this->formatInstanceName((string)$device['name']);
+            $createConfig = [
+                'moduleID'      => self::DEVICE_MODULE_GUID,
+                'configuration' => ['DeviceId' => $device['id']],
+                'name'          => $name
+            ];
             $values[] = [
-                'name'      => $name,
-                'deviceId'  => $device['id'],
-                'model'     => $device['model'],
-                'entities'  => implode(', ', $device['entities']),
+                'name'       => $name,
+                'deviceId'   => $device['id'],
+                'model'      => $device['model'],
+                'entities'   => implode(', ', $device['entities']),
                 'instanceID' => $instanceId,
-                'create'    => [
-                    'moduleID'      => self::DEVICE_MODULE_GUID,
-                    'configuration' => ['DeviceId' => $device['id']]
-                ]
+                'create'     => $createConfig
             ];
         }
         return $values;
@@ -449,20 +301,4 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         return substr($name, 0, $pos) . ' ' . substr($name, $pos);
     }
 
-    private function debug(string $message, string $data): void
-    {
-        try {
-            if (!$this->ReadPropertyBoolean('Debug')) {
-                return;
-            }
-        } catch (Throwable $e) {
-            return;
-        }
-        parent::SendDebug($this->t($message), $data, 0);
-    }
-
-    private function t(string $text): string
-    {
-        return method_exists($this, 'Translate') ? $this->Translate($text) : $text;
-    }
 }

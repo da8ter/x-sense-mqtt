@@ -8,7 +8,7 @@
     "author": "Stephan Sprick",
     "url": "https://github.com/da8ter/x-sense-mqtt",
     "compatibility": {
-        "version": "7.1"
+        "version": "8.1"
     },
     "version": "0.1",
     "build": 1,

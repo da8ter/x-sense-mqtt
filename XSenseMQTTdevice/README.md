@@ -7,7 +7,7 @@ Dieses Modul verarbeitet die State-Topics eines X-Sense Geräts (Home Assistant 
 2. [Voraussetzungen](#2-voraussetzungen)
 3. [Software-Installation](#3-software-installation)
 4. [Einrichten der Instanzen in IP-Symcon](#4-einrichten-der-instanzen-in-ip-symcon)
-5. [Statusvariablen und Profile](#5-statusvariablen-und-profile)
+5. [Statusvariablen und Darstellungen](#5-statusvariablen-und-darstellungen)
 6. [Visualisierung](#6-visualisierung)
 7. [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
 8. [MQTT-Topics und Payload-Beispiele](#8-mqtt-topics-und-payload-beispiele)
@@ -15,11 +15,7 @@ Dieses Modul verarbeitet die State-Topics eines X-Sense Geräts (Home Assistant 
 ### 1. Funktionsumfang
 
 - Verarbeitet State-Topics pro Entity eines Geräts
-- Legt Variablen automatisch anhand der Discovery-Metadaten an
-- Unterstützt bekannte Suffixe: `online`, `battery`, `lifeend`, `smokealarm`, `smokefault`
-- Optional: generische Bool-Variablen für unbekannte Suffixe
-- Battery-Prozent als Integer, wenn `status` numerisch ist
-- Setzt `LastSeen` bei jeder gültigen Statusnachricht
+- **Config-driven**: Variablenname, Typ und Ident werden automatisch aus der Discovery-Config abgeleitet (`name`, `device_class`, `payload_on`/`payload_off`)
 
 ### 2. Voraussetzungen
 
@@ -42,32 +38,23 @@ Name | Beschreibung
 -----|-------------
 Device ID | Gerätekennung aus dem Discovery Topic bzw. `device.identifiers[0]`
 Create unknown entities | Unbekannte Suffixe als Bool-Variable anlegen
+Debug | Erweiterte Debug-Ausgaben im Meldungslog aktivieren
 
-### 5. Statusvariablen und Profile
+### 5. Statusvariablen und Darstellungen
 
 Die Statusvariablen werden automatisch angelegt. Das Löschen einzelner Variablen kann zu Fehlfunktionen führen.
+Alle Variablen verwenden die neuen [Darstellungen](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/darstellungen/) (ab IP-Symcon 8.0) statt Legacy-Profile.
 
 #### Geräteinformationen
 
-Name | Typ | Profil | Beschreibung
------|-----|--------|-------------
-Manufacturer | string | - | Hersteller
-Model | string | - | Modell
-Firmware | string | - | Firmware-Version
-LastSeen | integer | `~UnixTimestamp` | Zeitpunkt der letzten gültigen Statusnachricht
+Name | Typ | Darstellung | Beschreibung
+-----|-----|-------------|-------------
+Manufacturer | string | Wertanzeige | Hersteller
+Model | string | Wertanzeige | Modell
+Firmware | string | Wertanzeige | Firmware-Version
+LastSeen | integer | Datum/Uhrzeit | Zeitpunkt der letzten gültigen Statusnachricht
 
-#### Statusvariablen (Mapping)
-
-Name | Ident | Typ | Profil | Beschreibung
------|-------|-----|--------|-------------
-Online | Online | bool | `~Switch` | Verbindungstatus
-BatteryLow | BatteryLow | bool | `~Switch` | Batterie schwach
-EndOfLife | EndOfLife | bool | `~Switch` | Lebensende erreicht
-SmokeDetected | SmokeDetected | bool | `~Switch` | Rauch erkannt
-SmokeFault | SmokeFault | bool | `~Switch` | Rauchstörung
-Battery | Battery | integer | `~Battery.100` | Batterie in Prozent (nur bei numerischem `status`)
-
-Unbekannte Suffixe (optional): `Entity <suffix>` als Bool-Variable.
+Unbekannte Entities werden automatisch angelegt, wenn *Create unknown entities* aktiviert ist. Der Variablenname wird aus dem Config-Feld `name` übernommen, der Ident aus `device_class` oder dem sanitisierten Namen. Der Variablentyp wird aus der Config abgeleitet: Boolean wenn `payload_on`/`payload_off` vorhanden, sonst String.
 
 ### 6. Visualisierung
 
@@ -85,7 +72,7 @@ Interne Schnittstelle für den Konfigurator, um Entity-Metadaten zu aktualisiere
 
 Beispiel-Payload:
 ```json
-{ "status": "ON" }
+{ "status": "Online" }
 ```
 
 Vergleich erfolgt mit `payload_on`/`payload_off` aus der Discovery-Config. Unterstützte `value_template`-Variante: `{{ value_json.status }}`.

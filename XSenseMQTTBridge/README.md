@@ -16,8 +16,9 @@ Dieses Modul ist ein IP-Symcon **Splitter** zwischen dem MQTT Server und den X-S
 ### 1. Funktionsumfang
 
 - Abonniert automatisch MQTT Topics für Home Assistant MQTT Discovery:
-  - `{TopicRoot}/+/+/config`
-  - `{TopicRoot}/+/+/state`
+  - `{TopicRoot}/+/+/+/config` (z.B. `homeassistant/binary_sensor/+/+/config`, `homeassistant/sensor/+/+/config`)
+  - `{TopicRoot}/+/+/+/state`
+- Unterstützt alle Component-Typen: `binary_sensor`, `sensor`, `switch`, `number` etc.
 - Leitet alle empfangenen Nachrichten an die Child-Instanzen weiter (Konfigurator und Devices)
 - Hält Discovery-Configs im Cache, damit neu erstellte Device-Instanzen per Replay initialisiert werden können
 
@@ -37,13 +38,14 @@ https://github.com/da8ter/x-sense-mqtt/tree/main
 1. MQTT-Server-Instanz anlegen
 2. `X Sense MQTT Bridge`-Instanz anlegen
 3. Bridge mit dem MQTT-Server verbinden
-4. `TopicRoot` setzen (Standard: `homeassistant/binary_sensor`)
+4. `TopicRoot` setzen (Standard: `homeassistant`)
 
 __Konfigurationsseite__:
 
 Name | Beschreibung
 -----|-------------
 Topic root | MQTT Topic-Root für Discovery und State Topics
+Debug | Erweiterte Debug-Ausgaben im Meldungslog aktivieren
 
 ### 5. Statusvariablen und Profile
 
@@ -61,4 +63,5 @@ Sendet alle im Bridge-Cache gespeicherten Discovery-Configs erneut an die Child-
 
 ### 8. Versionshistorie
 
+- 1.1: Discovery-Cache Replay für neue Device-Instanzen
 - 1.0: Initiale Version

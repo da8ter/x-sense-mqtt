@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../libs/XSenseMQTTHelper.php';
+
 class XSenseMQTTDevice extends IPSModuleStrict
 {
+    use XSenseMQTTHelper;
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
     private const BRIDGE_TX_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}'; // Device→Bridge
     private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Device
@@ -57,6 +60,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $this->SetStatus(102);
         $this->updateReceiveDataFilter();
         $this->SetSummary($this->ReadPropertyString('DeviceId'));
+        $this->maintainAllVariables();
         $this->debug('ApplyChanges', sprintf('Status=102, DeviceId=%s, ParentId=%d', $this->ReadPropertyString('DeviceId'), $parentId));
         $this->requestDiscovery();
     }
@@ -144,26 +148,45 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return '';
         }
 
+        $data = json_decode($payload, true);
+        if (!is_array($data)) {
+            $this->debug('State', $this->t('Invalid JSON payload'));
+            return '';
+        }
+
         $entities = $this->readEntities();
-        $entry = $this->findEntityByTopic($topic, $entities);
-        if ($entry === null) {
+        $matches = $this->findEntitiesByTopic($topic, $entities);
+        if (empty($matches)) {
+            $this->debug('State', sprintf('No entity for topic=%s (entities=%d)', $topic, count($entities)));
             return '';
         }
 
-        $status = $this->extractStatus($payload, $entry);
-        if ($status === null) {
-            return '';
+        $updated = false;
+        foreach ($matches as $entry) {
+            $value = $this->extractValue($data, $entry);
+            if ($value === null) {
+                $this->debug('State', sprintf('No value for %s', $entry['ident'] ?? '?'));
+                continue;
+            }
+            $this->processStatus($entry, $value);
+            $updated = true;
         }
 
-        $this->processStatus($entry, $status);
-        $this->setValueIfChanged('LastSeen', time());
+        if ($updated) {
+            $this->SetValue('LastSeen', time());
+        }
 
         return '';
     }
 
     public function GetCompatibleParents(): string
     {
-        return json_encode(['type' => 'connect', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
+        return json_encode([
+            'type'    => 'connect',
+            'modules' => [
+                ['moduleID' => self::BRIDGE_MODULE_GUID, 'configuration' => new stdClass()]
+            ]
+        ]);
     }
 
     public function UpdateDiscovery(string $json): void
@@ -193,10 +216,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $propertyDeviceId = trim($this->ReadPropertyString('DeviceId'));
         $this->debug('UpdateDiscovery', sprintf('PropertyDeviceId=%s, EntryDeviceId=%s', $propertyDeviceId, $deviceId));
         
-        if ($propertyDeviceId === '') {
-            IPS_SetProperty($this->InstanceID, 'DeviceId', $deviceId);
-            IPS_ApplyChanges($this->InstanceID);
-        } elseif (strcasecmp($propertyDeviceId, $deviceId) !== 0) {
+        if ($propertyDeviceId === '' || strcasecmp($propertyDeviceId, $deviceId) !== 0) {
             $this->debug('UpdateDiscovery', sprintf('%s (property=%s, entry=%s)', $this->t('DeviceId mismatch'), $propertyDeviceId, $deviceId));
             return;
         }
@@ -212,15 +232,13 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $entry['ident'] = $entry['ident'] ?? $this->getIdentForEntry($entry);
 
         $entities = $this->readEntities();
-        $previousTopic = isset($entities[$uniqueId]) ? (string)($entities[$uniqueId]['state_topic'] ?? '') : '';
         $entities[$uniqueId] = $entry;
         $this->writeEntities($entities);
 
-        $this->debug('UpdateDiscovery', sprintf('Creating variables for suffix=%s, ident=%s', $entry['suffix'] ?? '', $entry['ident'] ?? ''));
-        $this->ensureDeviceInfoVariables($entry['device'] ?? []);
-        $this->ensureEntityVariable($entry);
+        $this->maintainDeviceVariables();
+        $this->maintainEntityVariable($entry);
+        $this->updateDeviceInfo($entry['device'] ?? []);
         $this->updateReceiveDataFilter();
-        $this->debug('UpdateDiscovery', 'Variables created successfully');
     }
 
     private function updateReceiveDataFilter(): void
@@ -247,28 +265,53 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return;
         }
         $deviceId = trim($this->ReadPropertyString('DeviceId'));
-        $this->debug('requestDiscovery', sprintf('Requesting replay from Bridge %d for DeviceId=%s', $parentId, $deviceId));
-        if (function_exists('XSNB_ReplayDiscovery')) {
-            @XSNB_ReplayDiscovery($parentId, $deviceId);
-        } else {
-            $this->debug('requestDiscovery', 'XSNB_ReplayDiscovery not available');
+        if ($deviceId === '') {
+            $this->debug('requestDiscovery', 'DeviceId not set, skipping');
+            return;
         }
+        $this->debug('requestDiscovery', sprintf('Reading cache from Bridge %d for DeviceId=%s', $parentId, $deviceId));
+
+        try {
+            $raw = @XSNB_GetDiscoveryCache($parentId);
+        } catch (Throwable $e) {
+            $this->debug('requestDiscovery', 'GetDiscoveryCache failed: ' . $e->getMessage());
+            return;
+        }
+        if (!is_string($raw) || $raw === '') {
+            $this->debug('requestDiscovery', 'Cache empty');
+            return;
+        }
+
+        $cache = json_decode($raw, true);
+        if (!is_array($cache)) {
+            return;
+        }
+
+        $count = 0;
+        foreach ($cache as $topic => $payload) {
+            if (!is_string($topic) || !str_ends_with($topic, '/config')) {
+                continue;
+            }
+            if (!is_string($payload) || $payload === '') {
+                continue;
+            }
+            if ($deviceId !== '') {
+                $topicDeviceId = $this->getTopicToken($topic, 3);
+                if (strcasecmp($topicDeviceId, $deviceId) !== 0) {
+                    continue;
+                }
+            }
+            $decoded = $this->decodePayload($payload);
+            $this->processConfig($topic, $decoded);
+            $count++;
+        }
+        $this->debug('requestDiscovery', sprintf('Processed %d config entries', $count));
     }
 
     private function getParentId(): int
     {
         $inst = @IPS_GetInstance($this->InstanceID);
         return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
-    }
-
-    private function getTopicToken(string $topic, int $fromEnd): string
-    {
-        $parts = explode('/', trim($topic, '/'));
-        $index = count($parts) - $fromEnd;
-        if ($index >= 0 && $index < count($parts)) {
-            return (string)$parts[$index];
-        }
-        return '';
     }
 
     private function extractDeviceIdFromEntry(array $entry): string
@@ -280,47 +323,6 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return $this->getDeviceIdentifier($entry['device']);
         }
         return '';
-    }
-
-    private function getDeviceIdentifier(array $device): string
-    {
-        if (!isset($device['identifiers'])) {
-            return '';
-        }
-        $identifiers = $device['identifiers'];
-        $values = [];
-        $add = function ($value) use (&$values): void {
-            if (is_string($value)) {
-                $value = trim($value);
-                if ($value !== '') {
-                    $values[] = $value;
-                }
-            }
-        };
-
-        if (is_string($identifiers)) {
-            $add($identifiers);
-        } elseif (is_array($identifiers)) {
-            foreach ($identifiers as $entry) {
-                if (is_array($entry)) {
-                    foreach ($entry as $nested) {
-                        $add($nested);
-                    }
-                } else {
-                    $add($entry);
-                }
-            }
-        }
-
-        if (empty($values)) {
-            return '';
-        }
-        return $values[count($values) - 1];
-    }
-
-    private function isConfigTopic(string $topic): bool
-    {
-        return str_ends_with($topic, '/config');
     }
 
     private function processConfig(string $topic, string $payload): void
@@ -349,12 +351,17 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return;
         }
 
+        $component = $this->getTopicToken($topic, 4);
+
         $entry = [
             'unique_id'      => $uniqueId,
             'name'           => (string)($cfg['name'] ?? ''),
+            'component'      => $component,
             'state_topic'    => $stateTopic,
+            'device_class'   => (string)($cfg['device_class'] ?? ''),
             'payload_on'     => (string)($cfg['payload_on'] ?? ''),
             'payload_off'    => (string)($cfg['payload_off'] ?? ''),
+            'unit_of_measurement' => (string)($cfg['unit_of_measurement'] ?? ''),
             'value_template' => (string)($cfg['value_template'] ?? ''),
             'suffix'         => $this->extractSuffix($uniqueId),
             'device'         => [
@@ -371,105 +378,191 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
     private function processStatus(array $entry, $status): void
     {
-        $suffix = (string)($entry['suffix'] ?? '');
         $ident = (string)($entry['ident'] ?? $this->getIdentForEntry($entry));
         if ($ident === '') {
             return;
         }
 
-        if ($suffix === 'battery' && is_numeric($status)) {
-            $this->ensureBatteryPercentVariable();
-            $this->setValueIfChanged('Battery', (int)round((float)$status));
+        $varType = $this->resolveVariableType($entry);
+        $statusStr = (string)$status;
+
+        if ($varType === 0) {
+            $payloadOn = (string)($entry['payload_on'] ?? '');
+            $payloadOff = (string)($entry['payload_off'] ?? '');
+            if ($payloadOn !== '' && $statusStr === $payloadOn) {
+                $this->debug('State', sprintf('%s=%s → true', $ident, $statusStr));
+                $this->SetValue($ident, true);
+                return;
+            }
+            if ($payloadOff !== '' && $statusStr === $payloadOff) {
+                $this->debug('State', sprintf('%s=%s → false', $ident, $statusStr));
+                $this->SetValue($ident, false);
+                return;
+            }
+            $this->debug('State', sprintf($this->t('Unknown status for %s: %s'), $ident, $statusStr));
+            return;
         }
 
+        if ($varType === 2) {
+            $this->debug('State', sprintf('%s=%s → float', $ident, $statusStr));
+            $this->SetValue($ident, (float)$status);
+            return;
+        }
+        if ($varType === 1) {
+            $this->debug('State', sprintf('%s=%s → int', $ident, $statusStr));
+            $this->SetValue($ident, (int)$status);
+            return;
+        }
+        $this->debug('State', sprintf('%s=%s', $ident, $statusStr));
+        $this->SetValue($ident, $statusStr);
+    }
+
+    private function extractValue(array $data, array $entry)
+    {
+        $key = $this->parseTemplateKey((string)($entry['value_template'] ?? ''));
+        if ($key !== '' && array_key_exists($key, $data)) {
+            return $data[$key];
+        }
+        if (array_key_exists('status', $data)) {
+            return $data['status'];
+        }
+        return null;
+    }
+
+    private function parseTemplateKey(string $template): string
+    {
+        if (preg_match('/value_json\.([\w]+)/', $template, $m)) {
+            return $m[1];
+        }
+        if (preg_match("/value_json\['([\w]+)'\]/", $template, $m)) {
+            return $m[1];
+        }
+        return '';
+    }
+
+    private function maintainAllVariables(): void
+    {
+        $entities = $this->readEntities();
+        if (empty($entities)) {
+            return;
+        }
+        $this->maintainDeviceVariables();
+        foreach ($entities as $entry) {
+            if (is_array($entry)) {
+                $this->maintainEntityVariable($entry);
+            }
+        }
+    }
+
+    private function maintainDeviceVariables(): void
+    {
+        $this->maintainString('Manufacturer', 'Manufacturer', 1);
+        $this->maintainString('Model', 'Model', 2);
+        $this->maintainString('Firmware', 'Firmware', 3);
+        $this->maintainInteger('LastSeen', 'Last Seen', 4, $this->getDateTimePresentation());
+    }
+
+    private function updateDeviceInfo(array $device): void
+    {
+        $this->SetValue('Manufacturer', (string)($device['manufacturer'] ?? ''));
+        $this->SetValue('Model', (string)($device['model'] ?? ''));
+        $this->SetValue('Firmware', (string)($device['sw_version'] ?? ''));
+    }
+
+    private function maintainEntityVariable(array $entry): void
+    {
+        $ident = (string)($entry['ident'] ?? $this->getIdentForEntry($entry));
+        if ($ident === '') {
+            return;
+        }
+        $name = $this->resolveVariableName($entry);
+        $position = $this->resolvePosition($entry);
+        $varType = $this->resolveVariableType($entry);
+
+        $this->MaintainVariable($ident, $name, $varType, '', $position, true);
+        $this->applyBoolPresentation($ident, $entry, $varType);
+    }
+
+    private function applyBoolPresentation(string $ident, array $entry, int $varType): void
+    {
+        if ($varType !== 0) {
+            return;
+        }
         $payloadOn = (string)($entry['payload_on'] ?? '');
         $payloadOff = (string)($entry['payload_off'] ?? '');
-
-        if ($payloadOn !== '' && (string)$status === $payloadOn) {
-            $this->setValueIfChanged($ident, true);
+        if ($payloadOn === '' && $payloadOff === '') {
             return;
         }
-
-        if ($payloadOff !== '' && (string)$status === $payloadOff) {
-            $this->setValueIfChanged($ident, false);
+        $varId = @$this->GetIDForIdent($ident);
+        if ($varId === false) {
             return;
         }
-
-        $this->debug('State', sprintf($this->t('Unknown status for %s: %s'), $ident, (string)$status));
+        $option = static function (bool $value, string $caption): array {
+            return [
+                'Value'               => $value,
+                'Caption'             => $caption,
+                'IconActive'          => false,
+                'IconValue'           => '',
+                'ColorActive'         => false,
+                'ColorValue'          => -1,
+                'ColorDisplay'        => -1,
+                'ContentColorActive'  => false,
+                'ContentColorValue'   => -1,
+                'ContentColorDisplay' => -1
+            ];
+        };
+        IPS_SetVariableCustomPresentation($varId, [
+            'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,
+            'OPTIONS' => json_encode([
+                $option(false, $payloadOff ?: 'Off'),
+                $option(true, $payloadOn ?: 'On')
+            ])
+        ]);
     }
 
-    private function extractStatus(string $payload, array $entry)
+    private function resolveVariableName(array $entry): string
     {
-        if ($payload === '') {
-            return null;
-        }
-
-        $data = json_decode($payload, true);
-        if (!is_array($data)) {
-            $this->debug('State', $this->t('Invalid JSON payload'));
-            return null;
-        }
-
-        $template = (string)($entry['value_template'] ?? '');
-        if ($template !== '' && !$this->isSupportedTemplate($template)) {
-            $this->debug('State', $this->t('Unsupported value_template'));
-        }
-
-        if (!array_key_exists('status', $data)) {
-            $this->debug('State', $this->t('status missing'));
-            return null;
-        }
-
-        return $data['status'];
-    }
-
-    private function isSupportedTemplate(string $template): bool
-    {
-        $tpl = trim($template);
-        return $tpl === '' || str_contains($tpl, 'value_json') && str_contains($tpl, 'status');
-    }
-
-    private function ensureDeviceInfoVariables(array $device): void
-    {
-        $this->registerString('Manufacturer', $this->t('Manufacturer'), 1);
-        $this->registerString('Model', $this->t('Model'), 2);
-        $this->registerString('Firmware', $this->t('Firmware'), 3);
-        $this->registerInteger('LastSeen', $this->t('Last Seen'), '~UnixTimestamp', 4);
-
-        $this->setValueIfChanged('Manufacturer', (string)($device['manufacturer'] ?? ''));
-        $this->setValueIfChanged('Model', (string)($device['model'] ?? ''));
-        $this->setValueIfChanged('Firmware', (string)($device['sw_version'] ?? ''));
-    }
-
-    private function ensureEntityVariable(array $entry): void
-    {
-        $ident = (string)($entry['ident'] ?? $this->getIdentForEntry($entry));
-        if ($ident === '') {
-            return;
-        }
         $suffix = (string)($entry['suffix'] ?? '');
-        $name = $this->getNameForSuffix($suffix);
-        $position = $this->getPositionForSuffix($suffix);
-
-        $this->registerBoolean($ident, $name, $position);
-    }
-
-    private function ensureBatteryPercentVariable(): void
-    {
-        $this->registerInteger('Battery', $this->t('Battery'), '~Battery.100', 25);
-    }
-
-    private function getNameForSuffix(string $suffix): string
-    {
         $map = $this->getSuffixMap();
         if (isset($map[$suffix])) {
             return $this->t($map[$suffix]['name']);
         }
-        $suffix = trim($suffix);
-        if ($suffix === '') {
-            return $this->t('Entity');
+        $configName = trim((string)($entry['name'] ?? ''));
+        if ($configName !== '') {
+            return $configName;
         }
-        return sprintf($this->t('Entity %s'), $suffix);
+        if ($suffix !== '') {
+            return ucfirst($suffix);
+        }
+        return $this->t('Entity');
+    }
+
+    private function resolvePosition(array $entry): int
+    {
+        $suffix = (string)($entry['suffix'] ?? '');
+        $map = $this->getSuffixMap();
+        if (isset($map[$suffix]['position'])) {
+            return (int)$map[$suffix]['position'];
+        }
+        return 20;
+    }
+
+    private function resolveVariableType(array $entry): int
+    {
+        $payloadOn = (string)($entry['payload_on'] ?? '');
+        $payloadOff = (string)($entry['payload_off'] ?? '');
+        if ($payloadOn !== '' || $payloadOff !== '') {
+            return 0; // boolean
+        }
+        $component = (string)($entry['component'] ?? '');
+        if ($component === 'binary_sensor') {
+            return 0; // boolean
+        }
+        $unit = (string)($entry['unit_of_measurement'] ?? '');
+        if ($unit === '°C' || $unit === '°F' || $unit === '%') {
+            return 2; // float
+        }
+        return 3; // string (safe default)
     }
 
     private function getIdentForEntry(array $entry): string
@@ -482,28 +575,29 @@ class XSenseMQTTDevice extends IPSModuleStrict
         if (!$this->ReadPropertyBoolean('CreateUnknownEntities')) {
             return '';
         }
+        $deviceClass = (string)($entry['device_class'] ?? '');
+        if ($deviceClass !== '') {
+            return $this->sanitizeIdent(ucfirst($deviceClass));
+        }
+        $name = (string)($entry['name'] ?? '');
+        if ($name !== '') {
+            return $this->sanitizeIdent($name);
+        }
         $uniqueId = (string)($entry['unique_id'] ?? $suffix);
         return $this->sanitizeIdent('Entity_' . $uniqueId);
     }
 
     private function getSuffixMap(): array
     {
-        return [
+        // TODO: Re-enable after testing config-driven path
+        return [];
+        /*return [
             'online'     => ['ident' => 'Online', 'name' => 'Online', 'position' => 10],
             'battery'    => ['ident' => 'BatteryLow', 'name' => 'Battery Low', 'position' => 11],
             'lifeend'    => ['ident' => 'EndOfLife', 'name' => 'End Of Life', 'position' => 12],
             'smokealarm' => ['ident' => 'SmokeDetected', 'name' => 'Smoke Detected', 'position' => 13],
             'smokefault' => ['ident' => 'SmokeFault', 'name' => 'Smoke Fault', 'position' => 14]
-        ];
-    }
-
-    private function getPositionForSuffix(string $suffix): int
-    {
-        $map = $this->getSuffixMap();
-        if (isset($map[$suffix]['position'])) {
-            return (int)$map[$suffix]['position'];
-        }
-        return 20;
+        ];*/
     }
 
     private function readEntities(): array
@@ -518,29 +612,15 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $this->WriteAttributeString('Entities', json_encode($entities, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
-    private function findEntityByTopic(string $topic, array $entities): ?array
+    private function findEntitiesByTopic(string $topic, array $entities): array
     {
+        $matches = [];
         foreach ($entities as $entry) {
             if (($entry['state_topic'] ?? '') === $topic) {
-                return $entry;
+                $matches[] = $entry;
             }
         }
-        return null;
-    }
-
-    private function extractSuffix(string $uniqueId): string
-    {
-        $uniqueId = trim($uniqueId);
-        if ($uniqueId === '') {
-            return '';
-        }
-        foreach (['_', '-'] as $sep) {
-            $pos = strrpos($uniqueId, $sep);
-            if ($pos !== false) {
-                return strtolower(substr($uniqueId, $pos + 1));
-            }
-        }
-        return strtolower($uniqueId);
+        return $matches;
     }
 
     private function sanitizeIdent(string $value): string
@@ -553,68 +633,24 @@ class XSenseMQTTDevice extends IPSModuleStrict
         return $clean;
     }
 
-    private function decodePayload($payload): string
+    private function maintainBoolean(string $ident, string $name, int $position, string|array $presentation = '', bool $keep = true): void
     {
-        if (!is_string($payload)) {
-            return '';
-        }
-        $payload = trim($payload);
-        if ($payload === '') {
-            return '';
-        }
-        if (ctype_xdigit($payload) && (strlen($payload) % 2 === 0)) {
-            $bin = hex2bin($payload);
-            if ($bin !== false) {
-                return $bin;
-            }
-        }
-        return $payload;
+        $this->MaintainVariable($ident, $name, 0, $presentation, $position, $keep);
     }
 
-    private function registerBoolean(string $ident, string $name, int $position): void
+    private function maintainString(string $ident, string $name, int $position, string|array $presentation = '', bool $keep = true): void
     {
-        if (@$this->GetIDForIdent($ident) === false) {
-            $this->RegisterVariableBoolean($ident, $name, '', $position);
-        }
+        $this->MaintainVariable($ident, $name, 3, $presentation, $position, $keep);
     }
 
-    private function registerString(string $ident, string $name, int $position): void
+    private function maintainInteger(string $ident, string $name, int $position, string|array $presentation = '', bool $keep = true): void
     {
-        if (@$this->GetIDForIdent($ident) === false) {
-            $this->RegisterVariableString($ident, $name, '', $position);
-        }
+        $this->MaintainVariable($ident, $name, 1, $presentation, $position, $keep);
     }
 
-    private function registerInteger(string $ident, string $name, string $profile, int $position): void
+    private function getDateTimePresentation(): array
     {
-        if (@$this->GetIDForIdent($ident) === false) {
-            $this->RegisterVariableInteger($ident, $name, $profile, $position);
-        }
+        return ['PRESENTATION' => VARIABLE_PRESENTATION_DATE_TIME];
     }
 
-    private function setValueIfChanged(string $ident, $value): void
-    {
-        $varId = @$this->GetIDForIdent($ident);
-        if ($varId === false) {
-            return;
-        }
-        SetValue($varId, $value);
-    }
-
-    private function debug(string $message, string $data): void
-    {
-        try {
-            if (!$this->ReadPropertyBoolean('Debug')) {
-                return;
-            }
-        } catch (Throwable $e) {
-            return;
-        }
-        parent::SendDebug($this->t($message), $data, 0);
-    }
-
-    private function t(string $text): string
-    {
-        return method_exists($this, 'Translate') ? $this->Translate($text) : $text;
-    }
 }
