@@ -48,7 +48,7 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 ## Installation (Repository)
 
 Die Installation kann über den Module Store erfolgen (X-Sense MQTT) oder über **Module Control** durch Hinzufügen der Repository-URL.
-https://github.com/da8ter/x-sense-mqtt/tree/main
+[https://github.com/da8ter/x-sense-mqtt/tree/main](https://github.com/da8ter/x-sense-mqtt.git)
 
 ## 5. Architektur
 
