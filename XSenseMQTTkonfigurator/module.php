@@ -8,8 +8,10 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 {
     use XSenseMQTTHelper;
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
-    private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Konfigurator (not used anymore)
     private const DEVICE_MODULE_GUID = '{C523B0B6-870E-9726-778A-0FF5C6E9656E}';
+
+    private const STATUS_ACTIVE = 102;
+    private const STATUS_NO_BRIDGE = 104;
 
     public function Create(): void
     {
@@ -23,27 +25,11 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
         $bridgeId = $this->getBridgeId();
         if ($bridgeId <= 0) {
-            $this->SetStatus(104);
+            $this->SetStatus(self::STATUS_NO_BRIDGE);
             return;
         }
 
-        $this->SetStatus(102);
-    }
-
-    public function ReceiveData(string $JSONString): string
-    {
-        $data = json_decode($JSONString, true);
-        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_RX_GUID) {
-            return '';
-        }
-
-        $topic = (string)($data['Topic'] ?? '');
-        if ($topic === '' || !$this->isConfigTopic($topic)) {
-            return '';
-        }
-
-        $this->debug('ReceiveData', sprintf($this->t('Topic=%s'), $topic));
-        return '';
+        $this->SetStatus(self::STATUS_ACTIVE);
     }
 
     public function GetConfigurationForm(): string
@@ -64,12 +50,17 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     public function RequestAction(string $Ident, mixed $Value): void
     {
         if ($Ident === 'RefreshCache') {
-            $bridgeId = $this->getBridgeId();
-            if ($bridgeId > 0) {
-                @XSNB_ReplayDiscovery($bridgeId, '');
-            }
-            $this->ReloadForm();
+            $this->RefreshCache();
         }
+    }
+
+    public function RefreshCache(): void
+    {
+        $bridgeId = $this->getBridgeId();
+        if ($bridgeId > 0) {
+            @XSNB_ReplayDiscovery($bridgeId, '');
+        }
+        $this->ReloadForm();
     }
 
 
@@ -135,7 +126,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         foreach ($bridges as $bridgeId) {
             if (@IPS_InstanceExists($bridgeId)) {
                 $status = (int)(@IPS_GetInstance($bridgeId)['InstanceStatus'] ?? 0);
-                if ($status === 102) {
+                if ($status === self::STATUS_ACTIVE) {
                     return $bridgeId;
                 }
             }

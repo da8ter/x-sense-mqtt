@@ -10,7 +10,8 @@ Dieses Modul verarbeitet die State-Topics eines X-Sense Geräts (Home Assistant 
 5. [Statusvariablen und Darstellungen](#5-statusvariablen-und-darstellungen)
 6. [Visualisierung](#6-visualisierung)
 7. [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
-8. [MQTT-Topics und Payload-Beispiele](#8-mqtt-topics-und-payload-beispiele)
+8. [Versionshistorie](#8-versionshistorie)
+9. [MQTT-Topics und Payload-Beispiele](#9-mqtt-topics-und-payload-beispiele)
 
 ### 1. Funktionsumfang
 
@@ -64,7 +65,20 @@ Das Modul stellt keine eigene Visualisierung bereit.
 `void XSND_UpdateDiscovery(int $InstanzID, string $Json);`  
 Interne Schnittstelle für den Konfigurator, um Entity-Metadaten zu aktualisieren.
 
-### 8. MQTT-Topics und Payload-Beispiele
+### 8. Versionshistorie
+
+- 0.2: Aufräumen und Best-Practices-Anpassungen
+  - Unbenutzte `BRIDGE_TX_GUID` entfernt
+  - `Destroy()` ergänzt
+  - Status-Codes 201 (Bridge inactive) und 202 (Device ID empty) eingeführt
+  - `applyBoolPresentation()` mit Diff-Check (setzt Presentation nur bei Änderung)
+  - Toten Code entfernt (`maintainBoolean()`, leere `getSuffixMap()`)
+  - JSON-Round-Trip in `processConfig()` beseitigt
+  - Variablentyp-Heuristik um gängige numerische Einheiten erweitert (ppm, V, A, W, Hz, hPa, lx, …)
+  - Magic Numbers durch Konstanten ersetzt
+- 0.1: Initiale Version
+
+### 9. MQTT-Topics und Payload-Beispiele
 
 **State Topic** (aus Discovery):
 `homeassistant/binary_sensor/{deviceId}/{uniqueId}/state`

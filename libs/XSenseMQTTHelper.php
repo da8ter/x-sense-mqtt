@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 trait XSenseMQTTHelper
 {
+    /**
+     * Dekodiert einen MQTT-Payload. Wenn der Payload eine gerade Anzahl
+     * Hex-Zeichen enthält (z.B. MQTT Server liefert Binary als Hex-String),
+     * wird hex2bin ausgeführt. Ansonsten wird der String unverändert zurückgegeben.
+     */
     private function decodePayload($payload): string
     {
         if (!is_string($payload)) {
@@ -90,11 +95,7 @@ trait XSenseMQTTHelper
 
     private function debug(string $message, string $data): void
     {
-        try {
-            if (!$this->ReadPropertyBoolean('Debug')) {
-                return;
-            }
-        } catch (\Throwable $e) {
+        if (!@$this->ReadPropertyBoolean('Debug')) {
             return;
         }
         parent::SendDebug($this->t($message), $data, 0);

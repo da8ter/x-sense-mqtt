@@ -8,8 +8,14 @@ class XSenseMQTTDevice extends IPSModuleStrict
 {
     use XSenseMQTTHelper;
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
-    private const BRIDGE_TX_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}'; // Device→Bridge
     private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Device
+
+    private const STATUS_ACTIVE = 102;
+    private const STATUS_NO_PARENT = 104;
+    private const STATUS_PARENT_INACTIVE = 201;
+    private const STATUS_DEVICE_ID_EMPTY = 202;
+    private const AUTOCONNECT_MAX = 12;
+    private const AUTOCONNECT_INTERVAL_MS = 1000;
 
     public function Create(): void
     {
@@ -29,6 +35,12 @@ class XSenseMQTTDevice extends IPSModuleStrict
         }
     }
 
+    public function Destroy(): void
+    {
+        //Never delete this line!
+        parent::Destroy();
+    }
+
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
@@ -38,7 +50,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $parentId = $this->getParentId();
         if ($parentId <= 0) {
             $this->scheduleAutoConnect();
-            $this->SetStatus(104);
+            $this->SetStatus(self::STATUS_NO_PARENT);
             return;
         }
 
@@ -51,12 +63,17 @@ class XSenseMQTTDevice extends IPSModuleStrict
         } catch (Throwable $e) {
             $parentStatus = 0;
         }
-        if ($parentStatus !== 102) {
-            $this->SetStatus(104);
+        if ($parentStatus !== self::STATUS_ACTIVE) {
+            $this->SetStatus(self::STATUS_PARENT_INACTIVE);
             return;
         }
 
-        $this->SetStatus(102);
+        if (trim($this->ReadPropertyString('DeviceId')) === '') {
+            $this->SetStatus(self::STATUS_DEVICE_ID_EMPTY);
+            return;
+        }
+
+        $this->SetStatus(self::STATUS_ACTIVE);
         $this->updateReceiveDataFilter();
         $this->SetSummary($this->ReadPropertyString('DeviceId'));
         $this->maintainAllVariables();
@@ -75,7 +92,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         }
 
         $tries = $this->ReadAttributeInteger('AutoConnectTries');
-        if ($tries >= 12) {
+        if ($tries >= self::AUTOCONNECT_MAX) {
             $this->SetTimerInterval('AutoConnect', 0);
             return;
         }
@@ -91,11 +108,11 @@ class XSenseMQTTDevice extends IPSModuleStrict
     private function scheduleAutoConnect(): void
     {
         $tries = $this->ReadAttributeInteger('AutoConnectTries');
-        if ($tries >= 12) {
+        if ($tries >= self::AUTOCONNECT_MAX) {
             $this->SetTimerInterval('AutoConnect', 0);
             return;
         }
-        $this->SetTimerInterval('AutoConnect', 1000);
+        $this->SetTimerInterval('AutoConnect', self::AUTOCONNECT_INTERVAL_MS);
     }
 
     private function autoConnectToBridge(): int
@@ -108,7 +125,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
             } catch (Throwable $e) {
                 $status = 0;
             }
-            if ($status === 102) {
+            if ($status === self::STATUS_ACTIVE) {
                 $active[] = $id;
             }
         }
@@ -191,13 +208,17 @@ class XSenseMQTTDevice extends IPSModuleStrict
     public function UpdateDiscovery(string $json): void
     {
         $this->debug('UpdateDiscovery', sprintf('Received: %s', substr($json, 0, 200)));
-        
+
         $entry = json_decode($json, true);
         if (!is_array($entry)) {
             $this->debug('UpdateDiscovery', $this->t('Invalid JSON'));
             return;
         }
+        $this->applyDiscoveryEntry($entry);
+    }
 
+    private function applyDiscoveryEntry(array $entry): void
+    {
         $deviceId = $this->getTopicToken((string)($entry['state_topic'] ?? ''), 3);
         if ($deviceId === '') {
             $deviceId = $this->extractDeviceIdFromEntry($entry);
@@ -206,7 +227,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
             $entry['device']['id'] = $deviceId;
         }
         $this->debug('UpdateDiscovery', sprintf('Extracted DeviceId=%s from entry', $deviceId));
-        
+
         if ($deviceId === '') {
             $this->debug('UpdateDiscovery', $this->t('DeviceId missing'));
             return;
@@ -214,7 +235,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
         $propertyDeviceId = trim($this->ReadPropertyString('DeviceId'));
         $this->debug('UpdateDiscovery', sprintf('PropertyDeviceId=%s, EntryDeviceId=%s', $propertyDeviceId, $deviceId));
-        
+
         if ($propertyDeviceId === '' || strcasecmp($propertyDeviceId, $deviceId) !== 0) {
             $this->debug('UpdateDiscovery', sprintf('%s (property=%s, entry=%s)', $this->t('DeviceId mismatch'), $propertyDeviceId, $deviceId));
             return;
@@ -372,7 +393,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
             ]
         ];
 
-        $this->UpdateDiscovery(json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $this->applyDiscoveryEntry($entry);
     }
 
     private function processStatus(array $entry, $status): void
@@ -510,26 +531,30 @@ class XSenseMQTTDevice extends IPSModuleStrict
                 'ContentColorDisplay' => -1
             ];
         };
+        $desiredOptions = json_encode([
+            $option(false, $payloadOff ?: 'Off'),
+            $option(true, $payloadOn ?: 'On')
+        ]);
+        $current = @IPS_GetVariable($varId);
+        $currentPresentation = is_array($current) ? ($current['VariableCustomPresentation'] ?? []) : [];
+        if (is_array($currentPresentation)
+            && ($currentPresentation['PRESENTATION'] ?? '') === VARIABLE_PRESENTATION_VALUE_PRESENTATION
+            && ($currentPresentation['OPTIONS'] ?? '') === $desiredOptions) {
+            return;
+        }
         IPS_SetVariableCustomPresentation($varId, [
             'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,
-            'OPTIONS' => json_encode([
-                $option(false, $payloadOff ?: 'Off'),
-                $option(true, $payloadOn ?: 'On')
-            ])
+            'OPTIONS'      => $desiredOptions
         ]);
     }
 
     private function resolveVariableName(array $entry): string
     {
-        $suffix = (string)($entry['suffix'] ?? '');
-        $map = $this->getSuffixMap();
-        if (isset($map[$suffix])) {
-            return $this->t($map[$suffix]['name']);
-        }
         $configName = trim((string)($entry['name'] ?? ''));
         if ($configName !== '') {
             return $configName;
         }
+        $suffix = (string)($entry['suffix'] ?? '');
         if ($suffix !== '') {
             return ucfirst($suffix);
         }
@@ -538,11 +563,6 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
     private function resolvePosition(array $entry): int
     {
-        $suffix = (string)($entry['suffix'] ?? '');
-        $map = $this->getSuffixMap();
-        if (isset($map[$suffix]['position'])) {
-            return (int)$map[$suffix]['position'];
-        }
         return 20;
     }
 
@@ -558,19 +578,18 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return 0; // boolean
         }
         $unit = (string)($entry['unit_of_measurement'] ?? '');
-        if ($unit === '°C' || $unit === '°F' || $unit === '%') {
+        $floatUnits = ['°C', '°F', '%', 'ppm', 'ppb', 'V', 'mV', 'A', 'mA', 'W', 'kW', 'kWh', 'Wh', 'Hz', 'dB', 'dBm', 'hPa', 'mbar', 'bar', 'Pa', 'lx', 'lm', 'm', 'cm', 'mm', 'km', 'mph', 'km/h', 'm/s', '°', 'µg/m³', 'mg/m³'];
+        if (in_array($unit, $floatUnits, true)) {
             return 2; // float
+        }
+        if ($unit === '' && $component === 'sensor') {
+            return 2; // float (sensor without unit is typically numeric)
         }
         return 3; // string (safe default)
     }
 
     private function getIdentForEntry(array $entry): string
     {
-        $suffix = (string)($entry['suffix'] ?? '');
-        $map = $this->getSuffixMap();
-        if (isset($map[$suffix])) {
-            return $map[$suffix]['ident'];
-        }
         $deviceClass = (string)($entry['device_class'] ?? '');
         if ($deviceClass !== '') {
             return $this->sanitizeIdent(ucfirst($deviceClass));
@@ -579,21 +598,9 @@ class XSenseMQTTDevice extends IPSModuleStrict
         if ($name !== '') {
             return $this->sanitizeIdent($name);
         }
+        $suffix = (string)($entry['suffix'] ?? '');
         $uniqueId = (string)($entry['unique_id'] ?? $suffix);
         return $this->sanitizeIdent('Entity_' . $uniqueId);
-    }
-
-    private function getSuffixMap(): array
-    {
-        // TODO: Re-enable after testing config-driven path
-        return [];
-        /*return [
-            'online'     => ['ident' => 'Online', 'name' => 'Online', 'position' => 10],
-            'battery'    => ['ident' => 'BatteryLow', 'name' => 'Battery Low', 'position' => 11],
-            'lifeend'    => ['ident' => 'EndOfLife', 'name' => 'End Of Life', 'position' => 12],
-            'smokealarm' => ['ident' => 'SmokeDetected', 'name' => 'Smoke Detected', 'position' => 13],
-            'smokefault' => ['ident' => 'SmokeFault', 'name' => 'Smoke Fault', 'position' => 14]
-        ];*/
     }
 
     private function readEntities(): array
@@ -627,11 +634,6 @@ class XSenseMQTTDevice extends IPSModuleStrict
             $clean = 'Entity';
         }
         return $clean;
-    }
-
-    private function maintainBoolean(string $ident, string $name, int $position, string|array $presentation = '', bool $keep = true): void
-    {
-        $this->MaintainVariable($ident, $name, 0, $presentation, $position, $keep);
     }
 
     private function maintainString(string $ident, string $name, int $position, string|array $presentation = '', bool $keep = true): void

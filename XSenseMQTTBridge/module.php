@@ -9,8 +9,15 @@ class XSenseMQTTBridge extends IPSModuleStrict
     use XSenseMQTTHelper;
     private const MQTT_SERVER_GUID = '{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}';
     private const MQTT_DATA_GUID = '{7F7632D9-FA40-4F38-8DEA-C83CD4325A32}';
-    private const BRIDGE_TX_GUID = '{E8C5B3A2-1D4F-5A60-9B7C-2D3E4F5A6B7C}'; // Device→Bridge (ForwardData)
     private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Device (SendDataToChildren)
+
+    private const STATUS_ACTIVE = 102;
+    private const STATUS_NO_PARENT = 104;
+    private const STATUS_PARENT_INACTIVE = 201;
+    private const STATUS_TOPIC_ROOT_EMPTY = 202;
+    private const RETRY_MAX = 10;
+    private const RETRY_INTERVAL_MS = 500;
+    private const DISCOVERY_CACHE_MAX = 500;
 
     public function Create(): void
     {
@@ -22,11 +29,24 @@ class XSenseMQTTBridge extends IPSModuleStrict
         $this->RegisterTimer('RetryActivate', 0, 'XSNB_RetryActivate($_IPS[\'TARGET\']);');
     }
 
+    public function Destroy(): void
+    {
+        //Never delete this line!
+        parent::Destroy();
+    }
+
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
 
-        $this->SetReceiveDataFilter('.*');
+        $root = $this->normalizeTopicRoot($this->ReadPropertyString('TopicRoot'));
+        if ($root !== '') {
+            $escaped = preg_quote($root, '/');
+            $sep = '(?:\\\\/|\\/)';
+            $this->SetReceiveDataFilter('.*"Topic"\s*:\s*"' . $escaped . $sep . '.*".*');
+        } else {
+            $this->SetReceiveDataFilter('.*');
+        }
 
         $connID = 0;
         try {
@@ -37,20 +57,24 @@ class XSenseMQTTBridge extends IPSModuleStrict
 
         if ($connID === 0) {
             $this->scheduleRetry();
-            $this->SetStatus(104);
+            $this->SetStatus(self::STATUS_NO_PARENT);
             return;
         }
 
         if (!$this->HasActiveParent()) {
             $this->scheduleRetry();
-            $this->SetStatus(104);
+            $this->SetStatus(self::STATUS_PARENT_INACTIVE);
+            return;
+        }
+
+        if ($root === '') {
+            $this->SetStatus(self::STATUS_TOPIC_ROOT_EMPTY);
             return;
         }
 
         $this->SetTimerInterval('RetryActivate', 0);
         $this->WriteAttributeInteger('RetryCount', 0);
-        $this->SetStatus(102);
-        $root = $this->normalizeTopicRoot($this->ReadPropertyString('TopicRoot'));
+        $this->SetStatus(self::STATUS_ACTIVE);
         $this->SetSummary($root);
         $this->subscribeTopic($root . '/+/+/+/config');
         $this->subscribeTopic($root . '/+/+/+/state');
@@ -59,7 +83,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
     public function RetryActivate(): void
     {
         $count = $this->ReadAttributeInteger('RetryCount');
-        if ($count >= 10) {
+        if ($count >= self::RETRY_MAX) {
             $this->SetTimerInterval('RetryActivate', 0);
             return;
         }
@@ -70,11 +94,11 @@ class XSenseMQTTBridge extends IPSModuleStrict
     private function scheduleRetry(): void
     {
         $count = $this->ReadAttributeInteger('RetryCount');
-        if ($count >= 10) {
+        if ($count >= self::RETRY_MAX) {
             $this->SetTimerInterval('RetryActivate', 0);
             return;
         }
-        $this->SetTimerInterval('RetryActivate', 500);
+        $this->SetTimerInterval('RetryActivate', self::RETRY_INTERVAL_MS);
     }
 
     public function ReceiveData(string $JSONString): string
@@ -124,15 +148,6 @@ class XSenseMQTTBridge extends IPSModuleStrict
     public function GetCompatibleParents(): string
     {
         return json_encode(['type' => 'connect', 'moduleIDs' => [self::MQTT_SERVER_GUID]]);
-    }
-
-    public function ForwardData(string $JSONString): string
-    {
-        $data = json_decode($JSONString, true);
-        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_TX_GUID) {
-            return '';
-        }
-        return '';
     }
 
     public function ForwardToChildren(string $topic, string $payload): void
@@ -193,6 +208,9 @@ class XSenseMQTTBridge extends IPSModuleStrict
             }
         } else {
             $cache[$topic] = $payload;
+            while (count($cache) > self::DISCOVERY_CACHE_MAX) {
+                array_shift($cache);
+            }
         }
         $this->WriteAttributeString('DiscoveryCache', json_encode($cache, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
