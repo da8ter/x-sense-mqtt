@@ -61,5 +61,5 @@ X-Sense MQTT Device (Device)
 
 ## 6. Versionshistorie
 
-- **0.2**: Aufräumen & Best-Practices — Status-Codes mit Konstanten, `ReceiveDataFilter` auf TopicRoot eingeschränkt, tote Code-Pfade entfernt, Refresh-Button im Konfigurator, Discovery-Cache auf 500 Einträge limitiert, erweiterte Variablentyp-Erkennung, `Destroy()` in allen Modulen.
+- **0.2**: Aufräumen und Code optimieret.
 - **0.1**: Initiale Version
