@@ -6,6 +6,7 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 - SBS50 Bridge
 - XS0D-MR Rauchmelder
 - XS0B-MR121 Rauchmelder
+- XS01-M Rauchmelder
 
 ## Inhaltsverzeichnis
 
