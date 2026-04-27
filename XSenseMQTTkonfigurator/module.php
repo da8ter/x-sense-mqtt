@@ -32,6 +32,16 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         $this->SetStatus(self::STATUS_ACTIVE);
     }
 
+    public function GetCompatibleParents(): string
+    {
+        return json_encode(['type' => 'connect', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
+    }
+
+    public function ReceiveData(string $JSONString): string
+    {
+        return '';
+    }
+
     public function GetConfigurationForm(): string
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
@@ -119,6 +129,47 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
     private function getBridgeId(): int
     {
+        $parentId = $this->getParentId();
+        if ($this->isBridgeInstance($parentId)) {
+            return $parentId;
+        }
+
+        $parentId = $this->connectToBridgeParent();
+        if ($parentId > 0) {
+            return $parentId;
+        }
+
+        return $this->findBridgeInstance();
+    }
+
+    private function getParentId(): int
+    {
+        $inst = @IPS_GetInstance($this->InstanceID);
+        return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
+    }
+
+    private function connectToBridgeParent(): int
+    {
+        $bridgeId = $this->findBridgeInstance();
+        if ($bridgeId <= 0 || !function_exists('IPS_ConnectInstance')) {
+            return 0;
+        }
+
+        if (function_exists('IPS_IsInstanceCompatible') && !@IPS_IsInstanceCompatible($this->InstanceID, $bridgeId)) {
+            $this->debug('ApplyChanges', sprintf('Bridge #%d is not compatible', $bridgeId));
+            return 0;
+        }
+
+        if (!@IPS_ConnectInstance($this->InstanceID, $bridgeId)) {
+            $this->debug('ApplyChanges', sprintf('Could not connect to Bridge #%d', $bridgeId));
+            return 0;
+        }
+
+        return $this->getParentId();
+    }
+
+    private function findBridgeInstance(): int
+    {
         $bridges = @IPS_GetInstanceListByModuleID(self::BRIDGE_MODULE_GUID);
         if (!is_array($bridges) || empty($bridges)) {
             return 0;
@@ -133,6 +184,15 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         }
         // Return first bridge even if not active
         return (int)$bridges[0];
+    }
+
+    private function isBridgeInstance(int $instanceId): bool
+    {
+        if ($instanceId <= 0 || !@IPS_InstanceExists($instanceId)) {
+            return false;
+        }
+        $inst = @IPS_GetInstance($instanceId);
+        return is_array($inst) && (($inst['ModuleInfo']['ModuleID'] ?? '') === self::BRIDGE_MODULE_GUID);
     }
 
     private function readCache(): array

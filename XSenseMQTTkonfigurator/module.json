@@ -4,9 +4,9 @@
     "type": 4,
     "vendor": "Stephan Sprick",
     "aliases": ["X-Sense MQTT Konfigurator"],
-    "parentRequirements": [],
-    "childRequirements": ["{C523B0B6-870E-9726-778A-0FF5C6E9656E}"],
-    "implemented": [],
+    "parentRequirements": ["{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}"],
+    "childRequirements": [],
+    "implemented": ["{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}"],
     "prefix": "XSNK",
     "url": "https://github.com/da8ter/x-sense-mqtt"
 }
