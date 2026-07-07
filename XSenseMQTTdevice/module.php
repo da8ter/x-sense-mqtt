@@ -403,10 +403,10 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
     private function maintainDeviceVariables(): void
     {
-        $this->maintainString('Manufacturer', 'Manufacturer', 1);
-        $this->maintainString('Model', 'Model', 2);
-        $this->maintainString('Firmware', 'Firmware', 3);
-        $this->maintainInteger('LastSeen', 'Last Seen', 4, $this->getDateTimePresentation());
+        $this->maintainString('Manufacturer', $this->t('Manufacturer'), 1);
+        $this->maintainString('Model', $this->t('Model'), 2);
+        $this->maintainString('Firmware', $this->t('Firmware'), 3);
+        $this->maintainInteger('LastSeen', $this->t('Last Seen'), 4, $this->getDateTimePresentation());
     }
 
     private function updateDeviceInfo(array $device): void
@@ -459,8 +459,8 @@ class XSenseMQTTDevice extends IPSModuleStrict
             ];
         };
         $desiredOptions = json_encode([
-            $option(false, $payloadOff ?: 'Off'),
-            $option(true, $payloadOn ?: 'On')
+            $option(false, $this->t($payloadOff ?: 'Off')),
+            $option(true, $this->t($payloadOn ?: 'On'))
         ]);
         $current = @IPS_GetVariable($varId);
         $currentPresentation = is_array($current) ? ($current['VariableCustomPresentation'] ?? []) : [];
@@ -479,11 +479,11 @@ class XSenseMQTTDevice extends IPSModuleStrict
     {
         $configName = trim((string)($entry['name'] ?? ''));
         if ($configName !== '') {
-            return $configName;
+            return $this->t($configName);
         }
         $suffix = (string)($entry['suffix'] ?? '');
         if ($suffix !== '') {
-            return ucfirst($suffix);
+            return $this->t(ucfirst($suffix));
         }
         return $this->t('Entity');
     }
