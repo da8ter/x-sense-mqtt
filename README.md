@@ -2,6 +2,12 @@
 
 Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 
+## Bisher mit folgenden Geräten getestet:
+- SBS50 Bridge
+- XS0D-MR Rauchmelder
+- XS0B-MR121 Rauchmelder
+- XS01-M Rauchmelder
+
 ## Inhaltsverzeichnis
 
 1. [Funktionsumfang](#1-funktionsumfang)
@@ -43,7 +49,7 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 ## Installation (Repository)
 
 Die Installation kann über den Module Store erfolgen (X-Sense MQTT) oder über **Module Control** durch Hinzufügen der Repository-URL.
-https://github.com/da8ter/x-sense-mqtt/tree/main
+https://github.com/da8ter/x-sense-mqtt.git
 
 ## 5. Architektur
 
@@ -58,3 +64,8 @@ X-Sense MQTT Konfigurator (Konfigurator)
     ↓
 X-Sense MQTT Device (Device)
 ```
+
+## 6. Versionshistorie
+
+- **0.2**: Aufräumen und Code optimieret.
+- **0.1**: Initiale Version

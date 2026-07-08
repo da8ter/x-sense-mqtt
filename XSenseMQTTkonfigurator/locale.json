@@ -13,6 +13,9 @@
             "No Bridge connected": "Keine Bridge verbunden",
             "Debug": "Debug",
             "ReceiveData": "Empfangene Daten",
+            "ApplyChanges": "Änderungen anwenden",
+            "SyncDiscovery": "Discovery synchronisieren",
+            "readCache": "Cache lesen",
             "Topic=%s": "Topic=%s",
             "Donations / Gifts": "Spenden / Geschenke",
             "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:"
@@ -30,6 +33,9 @@
             "No Bridge connected": "No Bridge connected",
             "Debug": "Debug",
             "ReceiveData": "Receive data",
+            "ApplyChanges": "Apply changes",
+            "SyncDiscovery": "Sync discovery",
+            "readCache": "Read cache",
             "Topic=%s": "Topic=%s",
             "Donations / Gifts": "Donations / Gifts",
             "Say thank you and support the developer of this module:": "Say thank you and support the developer of this module:"

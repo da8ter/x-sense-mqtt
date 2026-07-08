@@ -2,17 +2,31 @@
     "translations": {
         "de": {
             "Topic root": "Topic-Root",
-            "Debug": "Debug-Modus",
+            "Debug": "Debug",
             "Topic=%s": "Topic=%s",
             "ReceiveData": "Daten empfangen",
+            "Config": "Konfiguration",
+            "GetDiscoveryCache": "Discovery-Cache abrufen",
+            "ReplayDiscovery": "Discovery erneut senden",
+            "Active": "Aktiv",
+            "No MQTT Server connected": "Kein MQTT Server verbunden",
+            "MQTT Server inactive": "MQTT Server inaktiv",
+            "Topic root is empty": "Topic-Root ist leer",
             "Donations / Gifts": "Spenden / Geschenke",
             "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:"
         },
         "en": {
             "Topic root": "Topic root",
-            "Debug": "Debug mode",
+            "Debug": "Debug",
             "Topic=%s": "Topic=%s",
             "ReceiveData": "Receive data",
+            "Config": "Config",
+            "GetDiscoveryCache": "Get discovery cache",
+            "ReplayDiscovery": "Replay discovery",
+            "Active": "Active",
+            "No MQTT Server connected": "No MQTT Server connected",
+            "MQTT Server inactive": "MQTT Server inactive",
+            "Topic root is empty": "Topic root is empty",
             "Donations / Gifts": "Donations / Gifts",
             "Say thank you and support the developer of this module:": "Say thank you and support the developer of this module:"
         }

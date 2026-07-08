@@ -63,5 +63,12 @@ Sendet alle im Bridge-Cache gespeicherten Discovery-Configs erneut an die Child-
 
 ### 8. Versionshistorie
 
-- 1.1: Discovery-Cache Replay für neue Device-Instanzen
-- 1.0: Initiale Version
+- 0.2: Aufräumen und Best-Practices-Anpassungen
+  - Tote `BRIDGE_TX_GUID` / `ForwardData()` entfernt
+  - `module.json` `implemented`/`parentRequirements` korrigiert (BRIDGE_RX_GUID statt TX)
+  - `Destroy()` ergänzt
+  - Status-Codes 201 (MQTT Server inactive) und 202 (Topic root empty) eingeführt
+  - `ReceiveDataFilter` auf TopicRoot eingeschränkt (Performance)
+  - Discovery-Cache auf max. 500 Einträge begrenzt (FIFO)
+  - Magic Numbers durch Konstanten ersetzt
+- 0.1: Discovery-Cache Replay für neue Device-Instanzen / Initiale Version

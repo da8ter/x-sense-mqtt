@@ -8,8 +8,10 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 {
     use XSenseMQTTHelper;
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
-    private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Konfigurator (not used anymore)
     private const DEVICE_MODULE_GUID = '{C523B0B6-870E-9726-778A-0FF5C6E9656E}';
+
+    private const STATUS_ACTIVE = 102;
+    private const STATUS_NO_BRIDGE = 104;
 
     public function Create(): void
     {
@@ -21,55 +23,110 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
-        $bridgeId = $this->getBridgeId();
-        if ($bridgeId <= 0) {
-            $this->SetStatus(104);
+        // Kein Heavy Work vor KR_READY (getBridgeId verbindet ggf. Instanzen)
+        if (IPS_GetKernelRunlevel() !== KR_READY) {
+            $this->RegisterMessage(0, IPS_KERNELSTARTED);
             return;
         }
 
-        $this->SetStatus(102);
+        $bridgeId = $this->getBridgeId();
+        // Nach getBridgeId registrieren: erst dort steht der endgültige Parent fest,
+        // und der eigene IPS_ConnectInstance-Aufruf löst so kein Re-Apply aus.
+        $this->registerWatchedMessages($this->getParentId());
+
+        if ($bridgeId <= 0) {
+            $this->SetStatus(self::STATUS_NO_BRIDGE);
+            return;
+        }
+
+        $this->SetStatus(self::STATUS_ACTIVE);
+    }
+
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
+    {
+        // Gleiches Muster wie Bridge/Device: ohne Re-Apply bliebe der Status-Latch
+        // (104) bestehen, wenn die Bridge erst nach dem Konfigurator entsteht.
+        switch ($Message) {
+            case IPS_KERNELSTARTED:
+            case FM_CONNECT:
+            case FM_DISCONNECT:
+                $this->ApplyChanges();
+                break;
+            case IM_CHANGESTATUS:
+                if ($SenderID === $this->getParentId()) {
+                    $this->ApplyChanges();
+                }
+                break;
+        }
+    }
+
+    private function registerWatchedMessages(int $parentId): void
+    {
+        foreach ($this->GetMessageList() as $senderID => $messageIDs) {
+            foreach ($messageIDs as $messageID) {
+                $this->UnregisterMessage($senderID, $messageID);
+            }
+        }
+        $this->RegisterMessage($this->InstanceID, FM_CONNECT);
+        $this->RegisterMessage($this->InstanceID, FM_DISCONNECT);
+        if ($parentId > 0) {
+            $this->RegisterMessage($parentId, IM_CHANGESTATUS);
+        }
+    }
+
+    public function GetCompatibleParents(): string
+    {
+        return json_encode(['type' => 'connect', 'moduleIDs' => [self::BRIDGE_MODULE_GUID]]);
     }
 
     public function ReceiveData(string $JSONString): string
     {
-        $data = json_decode($JSONString, true);
-        if (!is_array($data) || ($data['DataID'] ?? '') !== self::BRIDGE_RX_GUID) {
-            return '';
-        }
-
-        $topic = (string)($data['Topic'] ?? '');
-        if ($topic === '' || !$this->isConfigTopic($topic)) {
-            return '';
-        }
-
-        $this->debug('ReceiveData', sprintf($this->t('Topic=%s'), $topic));
         return '';
     }
 
     public function GetConfigurationForm(): string
     {
-        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $raw = file_get_contents(__DIR__ . '/form.json');
+        $form = $raw !== false ? json_decode($raw, true) : null;
+        if (!is_array($form)) {
+            $this->LogMessage('form.json could not be loaded', KL_ERROR);
+            return '{}';
+        }
 
         $bridgeId = $this->getBridgeId();
         $cacheCount = count($this->readCache());
-        $form['elements'][0]['caption'] = $bridgeId > 0
-            ? sprintf($this->t('Bridge #%d, Cache: %d entries'), $bridgeId, $cacheCount)
-            : $this->t('No Bridge found');
 
-        $form['elements'][2]['values'] = $this->buildDeviceValues();
+        // Elemente über ihren Namen finden — feste Indizes brechen bei Form-Umbauten
+        foreach ($form['elements'] as &$element) {
+            if (($element['name'] ?? '') === 'BridgeInfo') {
+                $element['caption'] = $bridgeId > 0
+                    ? sprintf($this->t('Bridge #%d, Cache: %d entries'), $bridgeId, $cacheCount)
+                    : $this->t('No Bridge found');
+            } elseif (($element['name'] ?? '') === 'DeviceConfigurator') {
+                $element['values'] = $this->buildDeviceValues();
+            }
+        }
+        unset($element);
 
-        return json_encode($form);
+        return (string)json_encode($form);
     }
-    
+
     public function RequestAction(string $Ident, mixed $Value): void
     {
         if ($Ident === 'RefreshCache') {
-            $bridgeId = $this->getBridgeId();
-            if ($bridgeId > 0) {
-                @XSNB_ReplayDiscovery($bridgeId, '');
-            }
-            $this->ReloadForm();
+            $this->RefreshCache();
+            return;
         }
+        throw new Exception('Invalid ident: ' . $Ident);
+    }
+
+    public function RefreshCache(): void
+    {
+        $bridgeId = $this->getBridgeId();
+        if ($bridgeId > 0) {
+            @XSNB_ReplayDiscovery($bridgeId, '');
+        }
+        $this->ReloadForm();
     }
 
 
@@ -128,6 +185,53 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
     private function getBridgeId(): int
     {
+        $parentId = $this->getParentId();
+        if ($this->isBridgeInstance($parentId)) {
+            return $parentId;
+        }
+
+        $parentId = $this->connectToBridgeParent();
+        if ($parentId > 0) {
+            return $parentId;
+        }
+
+        return $this->findBridgeInstance();
+    }
+
+    private function getParentId(): int
+    {
+        $inst = @IPS_GetInstance($this->InstanceID);
+        return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
+    }
+
+    private function connectToBridgeParent(): int
+    {
+        $bridgeId = $this->findBridgeInstance();
+        if ($bridgeId <= 0 || !function_exists('IPS_ConnectInstance')) {
+            return 0;
+        }
+
+        // @ unterdrückt keine Exceptions — Verbindungsversuch komplett absichern
+        try {
+            if (function_exists('IPS_IsInstanceCompatible') && !@IPS_IsInstanceCompatible($this->InstanceID, $bridgeId)) {
+                $this->debug('ApplyChanges', sprintf('Bridge #%d is not compatible', $bridgeId));
+                return 0;
+            }
+
+            if (!@IPS_ConnectInstance($this->InstanceID, $bridgeId)) {
+                $this->debug('ApplyChanges', sprintf('Could not connect to Bridge #%d', $bridgeId));
+                return 0;
+            }
+        } catch (Throwable $e) {
+            $this->debug('ApplyChanges', sprintf('Connect to Bridge #%d failed: %s', $bridgeId, $e->getMessage()));
+            return 0;
+        }
+
+        return $this->getParentId();
+    }
+
+    private function findBridgeInstance(): int
+    {
         $bridges = @IPS_GetInstanceListByModuleID(self::BRIDGE_MODULE_GUID);
         if (!is_array($bridges) || empty($bridges)) {
             return 0;
@@ -135,13 +239,22 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         foreach ($bridges as $bridgeId) {
             if (@IPS_InstanceExists($bridgeId)) {
                 $status = (int)(@IPS_GetInstance($bridgeId)['InstanceStatus'] ?? 0);
-                if ($status === 102) {
+                if ($status === self::STATUS_ACTIVE) {
                     return $bridgeId;
                 }
             }
         }
         // Return first bridge even if not active
         return (int)$bridges[0];
+    }
+
+    private function isBridgeInstance(int $instanceId): bool
+    {
+        if ($instanceId <= 0 || !@IPS_InstanceExists($instanceId)) {
+            return false;
+        }
+        $inst = @IPS_GetInstance($instanceId);
+        return is_array($inst) && (($inst['ModuleInfo']['ModuleID'] ?? '') === self::BRIDGE_MODULE_GUID);
     }
 
     private function readCache(): array

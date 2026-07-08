@@ -59,10 +59,18 @@ Das Modul stellt keine eigene Visualisierung bereit.
 
 Überträgt den aktuellen Discovery-Cache an bestehende Device-Instanzen.
 
+`void XSNK_RefreshCache(int $InstanzID);`
+
+Fordert die Bridge auf, alle gecachten Discovery-Configs erneut zu senden und lädt das Formular neu. Wird auch vom Refresh-Button im Konfigurator-Formular aufgerufen.
+
 ### 8. Versionshistorie
 
-- 1.1: Eigener Cache entfernt, liest jetzt Bridge-Cache
-- 1.0: Initiale Version
+- 0.2: Aufräumen und Best-Practices-Anpassungen
+  - `ReceiveData` und ungenutzte `BRIDGE_RX_GUID`-Konstante entfernt
+  - Formular aus `form.json` geladen (statt hartcodiert)
+  - Refresh-Button im Formular ergänzt (`XSNK_RefreshCache`)
+  - Status-Codes mit Konstanten
+- 0.1: Eigener Cache entfernt, liest jetzt Bridge-Cache / Initiale Version
 
 ### 9. MQTT-Discovery Beispiele
 
