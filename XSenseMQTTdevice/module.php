@@ -21,13 +21,24 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $this->RegisterPropertyString('DeviceId', '');
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('Entities', '{}');
-        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
 
     public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
     {
-        if ($Message === IPS_KERNELMESSAGE && $Data[0] === KR_READY) {
-            $this->ApplyChanges();
+        // Neu anwenden, wenn der Kernel bereit ist, sich die Verbindung ändert oder
+        // die Bridge ihren Status wechselt — sonst bliebe der Status-Latch (104/201)
+        // bis zum manuellen Übernehmen bestehen.
+        switch ($Message) {
+            case IPS_KERNELSTARTED:
+            case FM_CONNECT:
+            case FM_DISCONNECT:
+                $this->ApplyChanges();
+                break;
+            case IM_CHANGESTATUS:
+                if ($SenderID === $this->getParentId()) {
+                    $this->ApplyChanges();
+                }
+                break;
         }
     }
 
@@ -41,9 +52,17 @@ class XSenseMQTTDevice extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
+        // Kein Heavy Work vor KR_READY
+        if (IPS_GetKernelRunlevel() !== KR_READY) {
+            $this->RegisterMessage(0, IPS_KERNELSTARTED);
+            return;
+        }
+
         $this->SetReceiveDataFilter('.*');
 
         $parentId = $this->getParentId();
+        $this->registerWatchedMessages($parentId);
+
         if ($parentId <= 0) {
             $this->SetStatus(self::STATUS_NO_PARENT);
             return;
@@ -93,8 +112,8 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return '';
         }
 
-        $data = json_decode($payload, true);
-        if (!is_array($data)) {
+        $state = json_decode($payload, true);
+        if (!is_array($state)) {
             $this->debug('State', $this->t('Invalid JSON payload'));
             return '';
         }
@@ -108,7 +127,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
         $updated = false;
         foreach ($matches as $entry) {
-            $value = $this->extractValue($data, $entry);
+            $value = $this->extractValue($state, $entry);
             if ($value === null) {
                 $this->debug('State', sprintf('No value for %s', $entry['ident'] ?? '?'));
                 continue;
@@ -259,6 +278,20 @@ class XSenseMQTTDevice extends IPSModuleStrict
     {
         $inst = @IPS_GetInstance($this->InstanceID);
         return is_array($inst) ? (int)($inst['ConnectionID'] ?? 0) : 0;
+    }
+
+    private function registerWatchedMessages(int $parentId): void
+    {
+        foreach ($this->GetMessageList() as $senderID => $messageIDs) {
+            foreach ($messageIDs as $messageID) {
+                $this->UnregisterMessage($senderID, $messageID);
+            }
+        }
+        $this->RegisterMessage($this->InstanceID, FM_CONNECT);
+        $this->RegisterMessage($this->InstanceID, FM_DISCONNECT);
+        if ($parentId > 0) {
+            $this->RegisterMessage($parentId, IM_CHANGESTATUS);
+        }
     }
 
     private function extractDeviceIdFromEntry(array $entry): string
@@ -440,8 +473,9 @@ class XSenseMQTTDevice extends IPSModuleStrict
         if ($payloadOn === '' && $payloadOff === '') {
             return;
         }
-        $varId = @$this->GetIDForIdent($ident);
-        if ($varId === false) {
+        // GetIDForIdent wirft unter Module Strict bei fehlender Variable — @ hilft nicht
+        $varId = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
+        if (!is_int($varId) || $varId <= 0) {
             return;
         }
         $option = static function (bool $value, string $caption): array {

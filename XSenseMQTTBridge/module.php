@@ -25,7 +25,6 @@ class XSenseMQTTBridge extends IPSModuleStrict
         $this->RegisterPropertyString('TopicRoot', 'homeassistant');
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('DiscoveryCache', '{}');
-        $this->RegisterAttributeInteger('RetryCount', 0);
         $this->RegisterTimer('RetryActivate', 0, 'XSNB_RetryActivate($_IPS[\'TARGET\']);');
     }
 
@@ -35,9 +34,37 @@ class XSenseMQTTBridge extends IPSModuleStrict
         parent::Destroy();
     }
 
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
+    {
+        // Neu anwenden bei Kernel-Start, Verbindungswechsel oder Statuswechsel des
+        // MQTT-Servers — der Retry-Timer allein deckt nur ein 5-Sekunden-Fenster ab.
+        switch ($Message) {
+            case IPS_KERNELSTARTED:
+            case FM_CONNECT:
+            case FM_DISCONNECT:
+                $this->resetRetryCount();
+                $this->ApplyChanges();
+                break;
+            case IM_CHANGESTATUS:
+                if ($SenderID === $this->getParentId()) {
+                    $this->resetRetryCount();
+                    $this->ApplyChanges();
+                }
+                break;
+        }
+    }
+
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
+
+        // Kein Heavy Work vor KR_READY
+        if (IPS_GetKernelRunlevel() !== KR_READY) {
+            $this->RegisterMessage(0, IPS_KERNELSTARTED);
+            return;
+        }
+
+        $this->registerWatchedMessages($this->getParentId());
 
         $root = $this->normalizeTopicRoot($this->ReadPropertyString('TopicRoot'));
         if ($root !== '') {
@@ -73,7 +100,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
         }
 
         $this->SetTimerInterval('RetryActivate', 0);
-        $this->WriteAttributeInteger('RetryCount', 0);
+        $this->resetRetryCount();
         $this->SetStatus(self::STATUS_ACTIVE);
         $this->SetSummary($root);
         $this->subscribeTopic($root . '/+/+/+/config');
@@ -82,23 +109,53 @@ class XSenseMQTTBridge extends IPSModuleStrict
 
     public function RetryActivate(): void
     {
-        $count = $this->ReadAttributeInteger('RetryCount');
+        $count = $this->getRetryCount();
         if ($count >= self::RETRY_MAX) {
             $this->SetTimerInterval('RetryActivate', 0);
             return;
         }
-        $this->WriteAttributeInteger('RetryCount', $count + 1);
+        $this->setRetryCount($count + 1);
         $this->ApplyChanges();
     }
 
     private function scheduleRetry(): void
     {
-        $count = $this->ReadAttributeInteger('RetryCount');
-        if ($count >= self::RETRY_MAX) {
+        if ($this->getRetryCount() >= self::RETRY_MAX) {
             $this->SetTimerInterval('RetryActivate', 0);
             return;
         }
         $this->SetTimerInterval('RetryActivate', self::RETRY_INTERVAL_MS);
+    }
+
+    // Retry-Zähler als Buffer statt Attribut: Attribute überleben den Neustart —
+    // ein ausgeschöpfter Zähler hätte danach jeden weiteren Retry blockiert.
+    private function getRetryCount(): int
+    {
+        return (int)$this->GetBuffer('RetryCount');
+    }
+
+    private function setRetryCount(int $count): void
+    {
+        $this->SetBuffer('RetryCount', (string)$count);
+    }
+
+    private function resetRetryCount(): void
+    {
+        $this->SetBuffer('RetryCount', '0');
+    }
+
+    private function registerWatchedMessages(int $parentId): void
+    {
+        foreach ($this->GetMessageList() as $senderID => $messageIDs) {
+            foreach ($messageIDs as $messageID) {
+                $this->UnregisterMessage($senderID, $messageID);
+            }
+        }
+        $this->RegisterMessage($this->InstanceID, FM_CONNECT);
+        $this->RegisterMessage($this->InstanceID, FM_DISCONNECT);
+        if ($parentId > 0) {
+            $this->RegisterMessage($parentId, IM_CHANGESTATUS);
+        }
     }
 
     public function ReceiveData(string $JSONString): string
@@ -113,7 +170,6 @@ class XSenseMQTTBridge extends IPSModuleStrict
             return '';
         }
 
-        $payload = $data['Payload'] ?? '';
         $this->debug('ReceiveData', sprintf($this->t('Topic=%s'), $topic));
 
         $root = $this->normalizeTopicRoot($this->ReadPropertyString('TopicRoot'));
@@ -121,15 +177,18 @@ class XSenseMQTTBridge extends IPSModuleStrict
             return '';
         }
 
+        // Payload für ALLE Topics zu einem String normalisieren (MQTT Server kann
+        // Byte-Arrays liefern) — sonst gehen State-Updates bei den Kindern verloren,
+        // deren decodePayload() nur Strings akzeptiert.
+        $payload = $data['Payload'] ?? '';
+        $payloadStr = '';
+        if (is_string($payload)) {
+            $payloadStr = $payload;
+        } elseif (is_array($payload)) {
+            $payloadStr = implode('', array_map('chr', $payload));
+        }
+
         if (str_ends_with($topic, '/config')) {
-            // Decode payload if it's base64 encoded (from MQTT Server)
-            $payloadStr = '';
-            if (is_string($payload)) {
-                $payloadStr = $payload;
-            } elseif (is_array($payload)) {
-                // MQTT Server sends payload as byte array
-                $payloadStr = implode('', array_map('chr', $payload));
-            }
             $this->debug('Config', sprintf('Topic=%s PayloadLen=%d', $topic, strlen($payloadStr)));
             $this->updateDiscoveryCache($topic, $payloadStr);
         }
@@ -137,10 +196,10 @@ class XSenseMQTTBridge extends IPSModuleStrict
         $bridgeData = [
             'DataID' => self::BRIDGE_RX_GUID,
             'Topic' => $topic,
-            'Payload' => $payload
+            'Payload' => $payloadStr
         ];
 
-        $this->SendDataToChildren(json_encode($bridgeData));
+        $this->SendDataToChildren((string)json_encode($bridgeData));
 
         return '';
     }
@@ -229,7 +288,8 @@ class XSenseMQTTBridge extends IPSModuleStrict
             return true;
         }
 
-        $cfg = json_decode($payload, true);
+        // Cache-Payloads können hex-kodiert vorliegen — wie in requestDiscovery dekodieren
+        $cfg = json_decode($this->decodePayload($payload), true);
         if (!is_array($cfg)) {
             return false;
         }

@@ -23,13 +23,55 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
+        // Kein Heavy Work vor KR_READY (getBridgeId verbindet ggf. Instanzen)
+        if (IPS_GetKernelRunlevel() !== KR_READY) {
+            $this->RegisterMessage(0, IPS_KERNELSTARTED);
+            return;
+        }
+
         $bridgeId = $this->getBridgeId();
+        // Nach getBridgeId registrieren: erst dort steht der endgültige Parent fest,
+        // und der eigene IPS_ConnectInstance-Aufruf löst so kein Re-Apply aus.
+        $this->registerWatchedMessages($this->getParentId());
+
         if ($bridgeId <= 0) {
             $this->SetStatus(self::STATUS_NO_BRIDGE);
             return;
         }
 
         $this->SetStatus(self::STATUS_ACTIVE);
+    }
+
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
+    {
+        // Gleiches Muster wie Bridge/Device: ohne Re-Apply bliebe der Status-Latch
+        // (104) bestehen, wenn die Bridge erst nach dem Konfigurator entsteht.
+        switch ($Message) {
+            case IPS_KERNELSTARTED:
+            case FM_CONNECT:
+            case FM_DISCONNECT:
+                $this->ApplyChanges();
+                break;
+            case IM_CHANGESTATUS:
+                if ($SenderID === $this->getParentId()) {
+                    $this->ApplyChanges();
+                }
+                break;
+        }
+    }
+
+    private function registerWatchedMessages(int $parentId): void
+    {
+        foreach ($this->GetMessageList() as $senderID => $messageIDs) {
+            foreach ($messageIDs as $messageID) {
+                $this->UnregisterMessage($senderID, $messageID);
+            }
+        }
+        $this->RegisterMessage($this->InstanceID, FM_CONNECT);
+        $this->RegisterMessage($this->InstanceID, FM_DISCONNECT);
+        if ($parentId > 0) {
+            $this->RegisterMessage($parentId, IM_CHANGESTATUS);
+        }
     }
 
     public function GetCompatibleParents(): string
@@ -44,24 +86,38 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $raw = file_get_contents(__DIR__ . '/form.json');
+        $form = $raw !== false ? json_decode($raw, true) : null;
+        if (!is_array($form)) {
+            $this->LogMessage('form.json could not be loaded', KL_ERROR);
+            return '{}';
+        }
 
         $bridgeId = $this->getBridgeId();
         $cacheCount = count($this->readCache());
-        $form['elements'][0]['caption'] = $bridgeId > 0
-            ? sprintf($this->t('Bridge #%d, Cache: %d entries'), $bridgeId, $cacheCount)
-            : $this->t('No Bridge found');
 
-        $form['elements'][2]['values'] = $this->buildDeviceValues();
+        // Elemente über ihren Namen finden — feste Indizes brechen bei Form-Umbauten
+        foreach ($form['elements'] as &$element) {
+            if (($element['name'] ?? '') === 'BridgeInfo') {
+                $element['caption'] = $bridgeId > 0
+                    ? sprintf($this->t('Bridge #%d, Cache: %d entries'), $bridgeId, $cacheCount)
+                    : $this->t('No Bridge found');
+            } elseif (($element['name'] ?? '') === 'DeviceConfigurator') {
+                $element['values'] = $this->buildDeviceValues();
+            }
+        }
+        unset($element);
 
-        return json_encode($form);
+        return (string)json_encode($form);
     }
-    
+
     public function RequestAction(string $Ident, mixed $Value): void
     {
         if ($Ident === 'RefreshCache') {
             $this->RefreshCache();
+            return;
         }
+        throw new Exception('Invalid ident: ' . $Ident);
     }
 
     public function RefreshCache(): void
@@ -155,13 +211,19 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
             return 0;
         }
 
-        if (function_exists('IPS_IsInstanceCompatible') && !@IPS_IsInstanceCompatible($this->InstanceID, $bridgeId)) {
-            $this->debug('ApplyChanges', sprintf('Bridge #%d is not compatible', $bridgeId));
-            return 0;
-        }
+        // @ unterdrückt keine Exceptions — Verbindungsversuch komplett absichern
+        try {
+            if (function_exists('IPS_IsInstanceCompatible') && !@IPS_IsInstanceCompatible($this->InstanceID, $bridgeId)) {
+                $this->debug('ApplyChanges', sprintf('Bridge #%d is not compatible', $bridgeId));
+                return 0;
+            }
 
-        if (!@IPS_ConnectInstance($this->InstanceID, $bridgeId)) {
-            $this->debug('ApplyChanges', sprintf('Could not connect to Bridge #%d', $bridgeId));
+            if (!@IPS_ConnectInstance($this->InstanceID, $bridgeId)) {
+                $this->debug('ApplyChanges', sprintf('Could not connect to Bridge #%d', $bridgeId));
+                return 0;
+            }
+        } catch (Throwable $e) {
+            $this->debug('ApplyChanges', sprintf('Connect to Bridge #%d failed: %s', $bridgeId, $e->getMessage()));
             return 0;
         }
 
