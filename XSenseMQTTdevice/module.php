@@ -459,54 +459,62 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $position = $this->resolvePosition($entry);
         $varType = $this->resolveVariableType($entry);
 
-        $this->MaintainVariable($ident, $name, $varType, '', $position, true);
-        $this->applyBoolPresentation($ident, $entry, $varType);
+        $this->MaintainVariable($ident, $name, $varType, $this->buildPresentation($entry, $varType), $position, true);
+        $this->clearLegacyCustomPresentation($ident);
     }
 
-    private function applyBoolPresentation(string $ident, array $entry, int $varType): void
+    /**
+     * Modul-Darstellung für MaintainVariable. Bool-Variablen mit payload_on/off bekommen eine
+     * Wertdarstellung mit beschrifteten Optionen; Symcon 9.1 erlaubt in OPTIONS nur die acht
+     * Unterparameter unten (ColorDisplay/ContentColorDisplay lassen den ganzen Aufruf scheitern).
+     */
+    private function buildPresentation(array $entry, int $varType): string|array
     {
         if ($varType !== 0) {
-            return;
+            return '';
         }
         $payloadOn = (string)($entry['payload_on'] ?? '');
         $payloadOff = (string)($entry['payload_off'] ?? '');
         if ($payloadOn === '' && $payloadOff === '') {
-            return;
+            return '';
         }
+        $option = static function (bool $value, string $caption): array {
+            return [
+                'Value'              => $value,
+                'Caption'            => $caption,
+                'IconActive'         => false,
+                'IconValue'          => '',
+                'ColorActive'        => false,
+                'ColorValue'         => -1,
+                'ContentColorActive' => false,
+                'ContentColorValue'  => -1
+            ];
+        };
+        return [
+            'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,
+            'OPTIONS'      => json_encode([
+                $option(false, $payloadOff ?: 'Off'),
+                $option(true, $payloadOn ?: 'On')
+            ], JSON_UNESCAPED_UNICODE)
+        ];
+    }
+
+    /**
+     * Frühere Versionen setzten die Beschriftung als Benutzer-Darstellung
+     * (IPS_SetVariableCustomPresentation); die überlagert die Modul-Darstellung und wird entfernt.
+     */
+    private function clearLegacyCustomPresentation(string $ident): void
+    {
         // GetIDForIdent wirft unter Module Strict bei fehlender Variable — @ hilft nicht
         $varId = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
         if (!is_int($varId) || $varId <= 0) {
             return;
         }
-        $option = static function (bool $value, string $caption): array {
-            return [
-                'Value'               => $value,
-                'Caption'             => $caption,
-                'IconActive'          => false,
-                'IconValue'           => '',
-                'ColorActive'         => false,
-                'ColorValue'          => -1,
-                'ColorDisplay'        => -1,
-                'ContentColorActive'  => false,
-                'ContentColorValue'   => -1,
-                'ContentColorDisplay' => -1
-            ];
-        };
-        $desiredOptions = json_encode([
-            $option(false, $this->t($payloadOff ?: 'Off')),
-            $option(true, $this->t($payloadOn ?: 'On'))
-        ]);
         $current = @IPS_GetVariable($varId);
-        $currentPresentation = is_array($current) ? ($current['VariableCustomPresentation'] ?? []) : [];
-        if (is_array($currentPresentation)
-            && ($currentPresentation['PRESENTATION'] ?? '') === VARIABLE_PRESENTATION_VALUE_PRESENTATION
-            && ($currentPresentation['OPTIONS'] ?? '') === $desiredOptions) {
-            return;
+        $custom = is_array($current) ? ($current['VariableCustomPresentation'] ?? []) : [];
+        if (is_array($custom) && ($custom['PRESENTATION'] ?? '') === VARIABLE_PRESENTATION_VALUE_PRESENTATION) {
+            @IPS_SetVariableCustomPresentation($varId, []);
         }
-        IPS_SetVariableCustomPresentation($varId, [
-            'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,
-            'OPTIONS'      => $desiredOptions
-        ]);
     }
 
     private function resolveVariableName(array $entry): string
