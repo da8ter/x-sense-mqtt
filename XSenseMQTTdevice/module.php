@@ -490,12 +490,16 @@ class XSenseMQTTDevice extends IPSModuleStrict
                 'ContentColorValue'  => -1
             ];
         };
+        $options = json_encode([
+            $option(false, $this->t($payloadOff ?: 'Off')),
+            $option(true, $this->t($payloadOn ?: 'On'))
+        ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if (!is_string($options)) {
+            return ''; // a payload that cannot be encoded: better no presentation than a broken one
+        }
         return [
             'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,
-            'OPTIONS'      => json_encode([
-                $option(false, $payloadOff ?: 'Off'),
-                $option(true, $payloadOn ?: 'On')
-            ], JSON_UNESCAPED_UNICODE)
+            'OPTIONS'      => $options
         ];
     }
 
@@ -512,7 +516,10 @@ class XSenseMQTTDevice extends IPSModuleStrict
         }
         $current = @IPS_GetVariable($varId);
         $custom = is_array($current) ? ($current['VariableCustomPresentation'] ?? []) : [];
-        if (is_array($custom) && ($custom['PRESENTATION'] ?? '') === VARIABLE_PRESENTATION_VALUE_PRESENTATION) {
+        // Only the module's own legacy entry: it carried ColorDisplay/ContentColorDisplay, which
+        // Symcon 9.1 rejects, so no console-made presentation can contain them.
+        if (is_array($custom) && ($custom['PRESENTATION'] ?? '') === VARIABLE_PRESENTATION_VALUE_PRESENTATION
+            && str_contains((string)($custom['OPTIONS'] ?? ''), 'ColorDisplay')) {
             @IPS_SetVariableCustomPresentation($varId, []);
         }
     }
