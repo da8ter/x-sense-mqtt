@@ -14,8 +14,9 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 2. [Voraussetzungen](#2-voraussetzungen)
 3. [Enthaltene Module](#3-enthaltene-module)
 4. [Einrichten der Instanzen in IP-Symcon](#4-einrichten-der-instanzen-in-ip-symcon)
-5. [Architektur](#5-architektur)
-6. [Versionshistorie](#6-versionshistorie)
+5. [Installation (Repository)](#5-installation-repository)
+6. [Architektur](#6-architektur)
+7. [Versionshistorie](#7-versionshistorie)
 
 ## 1. Funktionsumfang
 
@@ -32,11 +33,11 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 ## 3. Enthaltene Module
 
 - `X-Sense MQTT Bridge` (Splitter)
-  - README: https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTBridge/README.md
+  - [README](XSenseMQTTBridge/README.md)
 - `X-Sense MQTT Konfigurator` (Konfigurator)
-  - README: https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTkonfigurator/README.md
+  - [README](XSenseMQTTkonfigurator/README.md)
 - `X-Sense MQTT Device` (Device)
-  - README: https://github.com/da8ter/x-sense-mqtt/blob/main/XSenseMQTTdevice/README.md
+  - [README](XSenseMQTTdevice/README.md)
 
 ## 4. Einrichten der Instanzen in IP-Symcon
 
@@ -46,12 +47,12 @@ Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 4. In der X-Sense App in der Bridge Konfiguration den Punkt "Mit Home Assistant verbinden" entsprechend konfigurieren
 5. Im Konfigurator werden gefundene Geräte gelistet; darüber werden `X-Sense MQTT Device`-Instanzen angelegt. Falls keine Geräte angezeigt werden bitte die Home Assistant unterstützung in der X-Sense App kurz ausschalten und wieder einschalten. Danach sollten aktuelle Informationen von den X-Sense Geräten gesendet werden.
 
-## Installation (Repository)
+## 5. Installation (Repository)
 
 Die Installation kann über den Module Store erfolgen (X-Sense MQTT) oder über **Module Control** durch Hinzufügen der Repository-URL.
 https://github.com/da8ter/x-sense-mqtt.git
 
-## 5. Architektur
+## 6. Architektur
 
 ```
 X-Sense Gerät/Bridge
@@ -65,9 +66,9 @@ X-Sense MQTT Konfigurator (Konfigurator)
 X-Sense MQTT Device (Device)
 ```
 
-## 6. Versionshistorie
+## 7. Versionshistorie
 
-- **0.4**: Symcon 9.1: Beschriftungen der Bool-Variablen als Modul-Darstellung über `MaintainVariable` (die frühere Benutzer-Darstellung mit `ColorDisplay` lehnt 9.1 ab, jede MQTT-Nachricht endete im Fehler 201); eine alte Benutzer-Darstellung des Moduls wird einmalig entfernt, eigene bleiben. Status 201 (Bridge inaktiv) setzt sich bei Statuswechsel der Bridge selbst zurück. Discovery in einem Durchgang, Entity-Bestand und Topic-Index je Objekt gepuffert (gültig nur für den gelesenen Attributstand), Debug ohne Formatierung im Normalbetrieb. Code des Gerätemoduls in `libs/XSenseMQTTDeviceDiscovery.php` und `libs/XSenseMQTTDeviceVariables.php`; Rauchtest `tests/smoke_test.php` (nutzt den Prüfstand-Kernel aus `modules/LGThinQ`).
+- **0.4**: Symcon 9.1: Beschriftungen der Bool-Variablen als Modul-Darstellung über `MaintainVariable` (die frühere Benutzer-Darstellung mit `ColorDisplay` lehnt 9.1 ab, jede MQTT-Nachricht endete im Fehler 201); eine alte Benutzer-Darstellung des Moduls wird einmalig entfernt, eigene bleiben. Status 201 (Bridge inaktiv) setzt sich bei Statuswechsel der Bridge selbst zurück. Discovery in einem Durchgang, Entity-Bestand und Topic-Index je Objekt gepuffert (gültig nur für den gelesenen Attributstand), Debug ohne Formatierung im Normalbetrieb. Code des Gerätemoduls in `libs/XSenseMQTTDeviceDiscovery.php` und `libs/XSenseMQTTDeviceVariables.php`; Rauchtest [tests/smoke_test.php](tests/smoke_test.php) (nutzt den Prüfstand-Kernel aus `modules/LGThinQ`).
 - **0.3**: Umstellung auf Module Strict.
 - **0.2**: Aufräumen und Code optimiert.
 - **0.1**: Initiale Version
