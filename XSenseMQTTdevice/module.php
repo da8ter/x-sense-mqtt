@@ -3,10 +3,15 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../libs/XSenseMQTTHelper.php';
+require_once __DIR__ . '/../libs/XSenseMQTTDeviceDiscovery.php';
+require_once __DIR__ . '/../libs/XSenseMQTTDeviceVariables.php';
 
 class XSenseMQTTDevice extends IPSModuleStrict
 {
     use XSenseMQTTHelper;
+    use XSenseMQTTDeviceDiscovery;
+    use XSenseMQTTDeviceVariables;
+
     private const BRIDGE_MODULE_GUID = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
     private const BRIDGE_RX_GUID = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}'; // Bridge→Device
 
@@ -15,17 +20,13 @@ class XSenseMQTTDevice extends IPSModuleStrict
     private const STATUS_PARENT_INACTIVE = 201;
     private const STATUS_DEVICE_ID_EMPTY = 202;
 
-    // Session-Caches für den heißen Pfad (jede MQTT-Nachricht): erspart das
-    // json_decode des Entities-Attributs und den linearen Topic-Scan pro Nachricht.
-    private ?array $entitiesCache = null;
-    private ?array $topicIndexCache = null;
-
     public function Create(): void
     {
         parent::Create();
         $this->RegisterPropertyString('DeviceId', '');
         $this->RegisterPropertyBoolean('Debug', false);
         $this->RegisterAttributeString('Entities', '{}');
+        $this->RegisterAttributeString('PresentationMigrated', '0'); // einmalige Bereinigung, siehe migrateLegacyPresentations
     }
 
     public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
@@ -114,7 +115,10 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $this->debug('ReceiveData', 'Topic=%s Payload=%s', $topic, $payload);
 
         if ($this->isConfigTopic($topic)) {
-            $this->processConfig($topic, $payload);
+            $entry = $this->buildConfigEntry($topic, $payload);
+            if ($entry !== null) {
+                $this->commitDiscoveryEntries($this->prepareDiscoveryEntries([$entry]));
+            }
             return '';
         }
 
@@ -124,10 +128,9 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return '';
         }
 
-        $entities = $this->readEntities();
-        $matches = $this->findEntitiesByTopic($topic, $entities);
+        $matches = $this->findEntitiesByTopic($topic);
         if (empty($matches)) {
-            $this->debug('State', 'No entity for topic=%s (entities=%d)', $topic, count($entities));
+            $this->debug('State', 'No entity for topic=%s (entities=%d)', $topic, count($this->readEntities()));
             return '';
         }
 
@@ -157,6 +160,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         ]);
     }
 
+    /** Vom Konfigurator: ein bereits normalisierter Discovery-Eintrag als JSON. */
     public function UpdateDiscovery(string $json): void
     {
         $this->debug('UpdateDiscovery', 'Received: %s', substr($json, 0, 200));
@@ -166,157 +170,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
             $this->debug('UpdateDiscovery', $this->t('Invalid JSON'));
             return;
         }
-        $this->applyDiscoveryEntry($entry);
-    }
-
-    private function applyDiscoveryEntry(array $entry): void
-    {
-        $prepared = $this->prepareDiscoveryEntry($entry);
-        if ($prepared !== null) {
-            $this->commitDiscoveryEntries([$prepared]);
-        }
-    }
-
-    /**
-     * Validiert und normalisiert einen Discovery-Eintrag (DeviceId-Abgleich,
-     * suffix/ident). Rückgabe null, wenn der Eintrag nicht zu dieser Instanz gehört.
-     */
-    private function prepareDiscoveryEntry(array $entry): ?array
-    {
-        $deviceId = $this->getTopicToken((string)($entry['state_topic'] ?? ''), 3);
-        if ($deviceId === '') {
-            $deviceId = $this->extractDeviceIdFromEntry($entry);
-        }
-        if ($deviceId !== '') {
-            $entry['device']['id'] = $deviceId;
-        }
-        $this->debug('UpdateDiscovery', 'Extracted DeviceId=%s from entry', $deviceId);
-
-        if ($deviceId === '') {
-            $this->debug('UpdateDiscovery', $this->t('DeviceId missing'));
-            return null;
-        }
-
-        $propertyDeviceId = trim($this->ReadPropertyString('DeviceId'));
-        $this->debug('UpdateDiscovery', 'PropertyDeviceId=%s, EntryDeviceId=%s', $propertyDeviceId, $deviceId);
-
-        if ($propertyDeviceId === '' || strcasecmp($propertyDeviceId, $deviceId) !== 0) {
-            $this->debug('UpdateDiscovery', '%s (property=%s, entry=%s)', $this->t('DeviceId mismatch'), $propertyDeviceId, $deviceId);
-            return null;
-        }
-
-        $uniqueId = (string)($entry['unique_id'] ?? '');
-        $stateTopic = (string)($entry['state_topic'] ?? '');
-        if ($uniqueId === '' || $stateTopic === '') {
-            $this->debug('UpdateDiscovery', $this->t('unique_id/state_topic missing'));
-            return null;
-        }
-
-        $entry['suffix'] = $entry['suffix'] ?? $this->extractSuffix($uniqueId);
-        $entry['ident'] = $entry['ident'] ?? $this->getIdentForEntry($entry);
-
-        return $entry;
-    }
-
-    /**
-     * Persistiert vorbereitete Discovery-Einträge in EINEM Durchgang: ein
-     * Attribut-Write, ein Filter-Update — statt N Disk-Writes beim Cache-Replay.
-     */
-    private function commitDiscoveryEntries(array $entries): void
-    {
-        if ($entries === []) {
-            return;
-        }
-
-        $entities = $this->readEntities();
-        foreach ($entries as $entry) {
-            $entities[(string)$entry['unique_id']] = $entry;
-        }
-        $this->writeEntities($entities);
-
-        $this->maintainDeviceVariables();
-        $lastDevice = [];
-        foreach ($entries as $entry) {
-            $this->maintainEntityVariable($entry);
-            $lastDevice = $entry['device'] ?? [];
-        }
-        $this->updateDeviceInfo($lastDevice);
-        $this->updateReceiveDataFilter();
-    }
-
-    private function updateReceiveDataFilter(): void
-    {
-        $deviceId = trim($this->ReadPropertyString('DeviceId'));
-
-        $sep = '(?:\\\\/|\\/)';
-
-        if ($deviceId === '') {
-            $this->SetReceiveDataFilter('.*"Topic"\s*:\s*".*' . $sep . 'config".*');
-            return;
-        }
-
-        $escaped = preg_quote($deviceId, '/');
-        $filter = '.*"Topic"\s*:\s*".*' . $sep . $escaped . $sep . '[^"]+' . $sep . '(config|state)".*';
-        $this->SetReceiveDataFilter($filter);
-    }
-
-    private function requestDiscovery(): void
-    {
-        $parentId = $this->getParentId();
-        if ($parentId <= 0) {
-            $this->debug('requestDiscovery', 'No parent');
-            return;
-        }
-        $deviceId = trim($this->ReadPropertyString('DeviceId'));
-        if ($deviceId === '') {
-            $this->debug('requestDiscovery', 'DeviceId not set, skipping');
-            return;
-        }
-        $this->debug('requestDiscovery', 'Reading cache from Bridge %d for DeviceId=%s', $parentId, $deviceId);
-
-        try {
-            $raw = @XSNB_GetDiscoveryCache($parentId);
-        } catch (Throwable $e) {
-            $this->debug('requestDiscovery', 'GetDiscoveryCache failed: ' . $e->getMessage());
-            return;
-        }
-        if (!is_string($raw) || $raw === '') {
-            $this->debug('requestDiscovery', 'Cache empty');
-            return;
-        }
-
-        $cache = json_decode($raw, true);
-        if (!is_array($cache)) {
-            return;
-        }
-
-        // Alle passenden Einträge sammeln und in EINEM Commit übernehmen —
-        // sonst fallen pro Eintrag ein Attribut-Write und ein Filter-Reset an.
-        $prepared = [];
-        foreach ($cache as $topic => $payload) {
-            if (!is_string($topic) || !str_ends_with($topic, '/config')) {
-                continue;
-            }
-            if (!is_string($payload) || $payload === '') {
-                continue;
-            }
-            if ($deviceId !== '') {
-                $topicDeviceId = $this->getTopicToken($topic, 3);
-                if (strcasecmp($topicDeviceId, $deviceId) !== 0) {
-                    continue;
-                }
-            }
-            $entry = $this->buildConfigEntry($topic, $this->decodePayload($payload));
-            if ($entry === null) {
-                continue;
-            }
-            $entry = $this->prepareDiscoveryEntry($entry);
-            if ($entry !== null) {
-                $prepared[] = $entry;
-            }
-        }
-        $this->commitDiscoveryEntries($prepared);
-        $this->debug('requestDiscovery', 'Processed %d config entries', count($prepared));
+        $this->commitDiscoveryEntries($this->prepareDiscoveryEntries([$entry]));
     }
 
     private function getParentId(): int
@@ -338,360 +192,4 @@ class XSenseMQTTDevice extends IPSModuleStrict
             $this->RegisterMessage($parentId, IM_CHANGESTATUS);
         }
     }
-
-    private function extractDeviceIdFromEntry(array $entry): string
-    {
-        if (isset($entry['device']['id']) && is_string($entry['device']['id'])) {
-            return trim($entry['device']['id']);
-        }
-        if (isset($entry['device'])) {
-            return $this->getDeviceIdentifier($entry['device']);
-        }
-        return '';
-    }
-
-    private function processConfig(string $topic, string $payload): void
-    {
-        $entry = $this->buildConfigEntry($topic, $payload);
-        if ($entry !== null) {
-            $this->applyDiscoveryEntry($entry);
-        }
-    }
-
-    /** Baut aus einem Config-Payload den normalisierten Discovery-Eintrag (rein, ohne Seiteneffekte). */
-    private function buildConfigEntry(string $topic, string $payload): ?array
-    {
-        if ($payload === '') {
-            return null;
-        }
-
-        $cfg = json_decode($payload, true);
-        if (!is_array($cfg)) {
-            return null;
-        }
-
-        $uniqueId = trim((string)($cfg['unique_id'] ?? $this->getTopicToken($topic, 2)));
-        $device = isset($cfg['device']) && is_array($cfg['device']) ? $cfg['device'] : [];
-        $deviceId = $this->getTopicToken($topic, 3);
-        if ($deviceId === '') {
-            $deviceId = $this->getDeviceIdentifier($device);
-        }
-        if ($uniqueId === '' || $deviceId === '') {
-            return null;
-        }
-
-        $stateTopic = trim((string)($cfg['state_topic'] ?? ''));
-        if ($stateTopic === '') {
-            return null;
-        }
-
-        $component = $this->getTopicToken($topic, 4);
-
-        $entry = [
-            'unique_id'      => $uniqueId,
-            'name'           => (string)($cfg['name'] ?? ''),
-            'component'      => $component,
-            'state_topic'    => $stateTopic,
-            'device_class'   => (string)($cfg['device_class'] ?? ''),
-            'payload_on'     => (string)($cfg['payload_on'] ?? ''),
-            'payload_off'    => (string)($cfg['payload_off'] ?? ''),
-            'unit_of_measurement' => (string)($cfg['unit_of_measurement'] ?? ''),
-            'value_template' => (string)($cfg['value_template'] ?? ''),
-            'suffix'         => $this->extractSuffix($uniqueId),
-            'device'         => [
-                'id'           => $deviceId,
-                'name'         => (string)($device['name'] ?? $deviceId),
-                'manufacturer' => (string)($device['manufacturer'] ?? ''),
-                'model'        => (string)($device['model'] ?? ''),
-                'sw_version'   => (string)($device['sw_version'] ?? '')
-            ]
-        ];
-
-        return $entry;
-    }
-
-    private function processStatus(array $entry, $status): void
-    {
-        $ident = (string)($entry['ident'] ?? $this->getIdentForEntry($entry));
-        if ($ident === '') {
-            return;
-        }
-
-        $varType = $this->resolveVariableType($entry);
-        $statusStr = (string)$status;
-
-        if ($varType === 0) {
-            $payloadOn = (string)($entry['payload_on'] ?? '');
-            $payloadOff = (string)($entry['payload_off'] ?? '');
-            if ($payloadOn !== '' && $statusStr === $payloadOn) {
-                $this->debug('State', '%s=%s → true', $ident, $statusStr);
-                $this->SetValue($ident, true);
-                return;
-            }
-            if ($payloadOff !== '' && $statusStr === $payloadOff) {
-                $this->debug('State', '%s=%s → false', $ident, $statusStr);
-                $this->SetValue($ident, false);
-                return;
-            }
-            $this->debug('State', 'Unknown status for %s: %s', $ident, $statusStr);
-            return;
-        }
-
-        if ($varType === 2) {
-            $this->debug('State', '%s=%s → float', $ident, $statusStr);
-            $this->SetValue($ident, (float)$status);
-            return;
-        }
-        if ($varType === 1) {
-            $this->debug('State', '%s=%s → int', $ident, $statusStr);
-            $this->SetValue($ident, (int)$status);
-            return;
-        }
-        $this->debug('State', '%s=%s', $ident, $statusStr);
-        $this->SetValue($ident, $statusStr);
-    }
-
-    private function extractValue(array $data, array $entry)
-    {
-        $key = $this->parseTemplateKey((string)($entry['value_template'] ?? ''));
-        if ($key !== '' && array_key_exists($key, $data)) {
-            return $data[$key];
-        }
-        if (array_key_exists('status', $data)) {
-            return $data['status'];
-        }
-        return null;
-    }
-
-    private function parseTemplateKey(string $template): string
-    {
-        if (preg_match('/value_json\.([\w]+)/', $template, $m)) {
-            return $m[1];
-        }
-        if (preg_match("/value_json\['([\w]+)'\]/", $template, $m)) {
-            return $m[1];
-        }
-        return '';
-    }
-
-    private function maintainAllVariables(): void
-    {
-        $entities = $this->readEntities();
-        if (empty($entities)) {
-            return;
-        }
-        $this->maintainDeviceVariables();
-        foreach ($entities as $entry) {
-            if (is_array($entry)) {
-                $this->maintainEntityVariable($entry);
-            }
-        }
-    }
-
-    private function maintainDeviceVariables(): void
-    {
-        $this->maintainString('Manufacturer', $this->t('Manufacturer'), 1);
-        $this->maintainString('Model', $this->t('Model'), 2);
-        $this->maintainString('Firmware', $this->t('Firmware'), 3);
-        $this->maintainInteger('LastSeen', $this->t('Last Seen'), 4, $this->getDateTimePresentation());
-    }
-
-    private function updateDeviceInfo(array $device): void
-    {
-        $this->SetValue('Manufacturer', (string)($device['manufacturer'] ?? ''));
-        $this->SetValue('Model', (string)($device['model'] ?? ''));
-        $this->SetValue('Firmware', (string)($device['sw_version'] ?? ''));
-    }
-
-    private function maintainEntityVariable(array $entry): void
-    {
-        $ident = (string)($entry['ident'] ?? $this->getIdentForEntry($entry));
-        if ($ident === '') {
-            return;
-        }
-        $name = $this->resolveVariableName($entry);
-        $position = $this->resolvePosition($entry);
-        $varType = $this->resolveVariableType($entry);
-
-        $this->MaintainVariable($ident, $name, $varType, $this->buildPresentation($entry, $varType), $position, true);
-        $this->clearLegacyCustomPresentation($ident);
-    }
-
-    /**
-     * Modul-Darstellung für MaintainVariable. Bool-Variablen mit payload_on/off bekommen eine
-     * Wertdarstellung mit beschrifteten Optionen; Symcon 9.1 erlaubt in OPTIONS nur die acht
-     * Unterparameter unten (ColorDisplay/ContentColorDisplay lassen den ganzen Aufruf scheitern).
-     */
-    private function buildPresentation(array $entry, int $varType): string|array
-    {
-        if ($varType !== 0) {
-            return '';
-        }
-        $payloadOn = (string)($entry['payload_on'] ?? '');
-        $payloadOff = (string)($entry['payload_off'] ?? '');
-        if ($payloadOn === '' && $payloadOff === '') {
-            return '';
-        }
-        $option = static function (bool $value, string $caption): array {
-            return [
-                'Value'              => $value,
-                'Caption'            => $caption,
-                'IconActive'         => false,
-                'IconValue'          => '',
-                'ColorActive'        => false,
-                'ColorValue'         => -1,
-                'ContentColorActive' => false,
-                'ContentColorValue'  => -1
-            ];
-        };
-        $options = json_encode([
-            $option(false, $this->t($payloadOff ?: 'Off')),
-            $option(true, $this->t($payloadOn ?: 'On'))
-        ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        if (!is_string($options)) {
-            return ''; // a payload that cannot be encoded: better no presentation than a broken one
-        }
-        return [
-            'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,
-            'OPTIONS'      => $options
-        ];
-    }
-
-    /**
-     * Frühere Versionen setzten die Beschriftung als Benutzer-Darstellung
-     * (IPS_SetVariableCustomPresentation); die überlagert die Modul-Darstellung und wird entfernt.
-     */
-    private function clearLegacyCustomPresentation(string $ident): void
-    {
-        // GetIDForIdent wirft unter Module Strict bei fehlender Variable — @ hilft nicht
-        $varId = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
-        if (!is_int($varId) || $varId <= 0) {
-            return;
-        }
-        $current = @IPS_GetVariable($varId);
-        $custom = is_array($current) ? ($current['VariableCustomPresentation'] ?? []) : [];
-        // Only the module's own legacy entry: it carried ColorDisplay/ContentColorDisplay, which
-        // Symcon 9.1 rejects, so no console-made presentation can contain them.
-        if (is_array($custom) && ($custom['PRESENTATION'] ?? '') === VARIABLE_PRESENTATION_VALUE_PRESENTATION
-            && str_contains((string)($custom['OPTIONS'] ?? ''), 'ColorDisplay')) {
-            @IPS_SetVariableCustomPresentation($varId, []);
-        }
-    }
-
-    private function resolveVariableName(array $entry): string
-    {
-        $configName = trim((string)($entry['name'] ?? ''));
-        if ($configName !== '') {
-            return $this->t($configName);
-        }
-        $suffix = (string)($entry['suffix'] ?? '');
-        if ($suffix !== '') {
-            return $this->t(ucfirst($suffix));
-        }
-        return $this->t('Entity');
-    }
-
-    private function resolvePosition(array $entry): int
-    {
-        return 20;
-    }
-
-    private function resolveVariableType(array $entry): int
-    {
-        $payloadOn = (string)($entry['payload_on'] ?? '');
-        $payloadOff = (string)($entry['payload_off'] ?? '');
-        if ($payloadOn !== '' || $payloadOff !== '') {
-            return 0; // boolean
-        }
-        $component = (string)($entry['component'] ?? '');
-        if ($component === 'binary_sensor') {
-            return 0; // boolean
-        }
-        $unit = (string)($entry['unit_of_measurement'] ?? '');
-        $floatUnits = ['°C', '°F', '%', 'ppm', 'ppb', 'V', 'mV', 'A', 'mA', 'W', 'kW', 'kWh', 'Wh', 'Hz', 'dB', 'dBm', 'hPa', 'mbar', 'bar', 'Pa', 'lx', 'lm', 'm', 'cm', 'mm', 'km', 'mph', 'km/h', 'm/s', '°', 'µg/m³', 'mg/m³'];
-        if (in_array($unit, $floatUnits, true)) {
-            return 2; // float
-        }
-        if ($unit === '' && $component === 'sensor') {
-            return 2; // float (sensor without unit is typically numeric)
-        }
-        return 3; // string (safe default)
-    }
-
-    private function getIdentForEntry(array $entry): string
-    {
-        $deviceClass = (string)($entry['device_class'] ?? '');
-        if ($deviceClass !== '') {
-            return $this->sanitizeIdent(ucfirst($deviceClass));
-        }
-        $name = (string)($entry['name'] ?? '');
-        if ($name !== '') {
-            return $this->sanitizeIdent($name);
-        }
-        $suffix = (string)($entry['suffix'] ?? '');
-        $uniqueId = (string)($entry['unique_id'] ?? $suffix);
-        return $this->sanitizeIdent('Entity_' . $uniqueId);
-    }
-
-    private function readEntities(): array
-    {
-        if ($this->entitiesCache !== null) {
-            return $this->entitiesCache;
-        }
-        $raw = $this->ReadAttributeString('Entities');
-        $entities = json_decode($raw, true);
-        $this->entitiesCache = is_array($entities) ? $entities : [];
-        return $this->entitiesCache;
-    }
-
-    private function writeEntities(array $entities): void
-    {
-        $this->WriteAttributeString('Entities', (string)json_encode($entities, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        $this->entitiesCache = $entities;
-        $this->topicIndexCache = null;
-    }
-
-    private function findEntitiesByTopic(string $topic, array $entities): array
-    {
-        if ($this->topicIndexCache === null) {
-            $index = [];
-            foreach ($entities as $entry) {
-                if (!is_array($entry)) {
-                    continue;
-                }
-                $stateTopic = (string)($entry['state_topic'] ?? '');
-                if ($stateTopic !== '') {
-                    $index[$stateTopic][] = $entry;
-                }
-            }
-            $this->topicIndexCache = $index;
-        }
-        return $this->topicIndexCache[$topic] ?? [];
-    }
-
-    private function sanitizeIdent(string $value): string
-    {
-        $clean = preg_replace('/[^A-Za-z0-9_]/', '_', $value);
-        $clean = trim((string)$clean, '_');
-        if ($clean === '') {
-            $clean = 'Entity';
-        }
-        return $clean;
-    }
-
-    private function maintainString(string $ident, string $name, int $position, string|array $presentation = '', bool $keep = true): void
-    {
-        $this->MaintainVariable($ident, $name, 3, $presentation, $position, $keep);
-    }
-
-    private function maintainInteger(string $ident, string $name, int $position, string|array $presentation = '', bool $keep = true): void
-    {
-        $this->MaintainVariable($ident, $name, 1, $presentation, $position, $keep);
-    }
-
-    private function getDateTimePresentation(): array
-    {
-        return ['PRESENTATION' => VARIABLE_PRESENTATION_DATE_TIME];
-    }
-
 }

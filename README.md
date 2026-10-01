@@ -67,5 +67,7 @@ X-Sense MQTT Device (Device)
 
 ## 6. Versionshistorie
 
-- **0.2**: Aufräumen und Code optimieret.
+- **0.4**: Symcon 9.1: Beschriftungen der Bool-Variablen als Modul-Darstellung über `MaintainVariable` (die frühere Benutzer-Darstellung mit `ColorDisplay` lehnt 9.1 ab, jede MQTT-Nachricht endete im Fehler 201); eine alte Benutzer-Darstellung des Moduls wird einmalig entfernt, eigene bleiben. Status 201 (Bridge inaktiv) setzt sich bei Statuswechsel der Bridge selbst zurück. Discovery in einem Durchgang, Entity-Bestand und Topic-Index je Objekt gepuffert (gültig nur für den gelesenen Attributstand), Debug ohne Formatierung im Normalbetrieb. Code des Gerätemoduls in `libs/XSenseMQTTDeviceDiscovery.php` und `libs/XSenseMQTTDeviceVariables.php`; Rauchtest `tests/smoke_test.php` (nutzt den Prüfstand-Kernel aus `modules/LGThinQ`).
+- **0.3**: Umstellung auf Module Strict.
+- **0.2**: Aufräumen und Code optimiert.
 - **0.1**: Initiale Version

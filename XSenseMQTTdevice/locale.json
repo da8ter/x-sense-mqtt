@@ -51,7 +51,8 @@
             "Bridge inactive": "Bridge inaktiv",
             "Device ID is empty": "Geräte-ID ist leer",
             "Donations / Gifts": "Spenden / Geschenke",
-            "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:"
+            "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:",
+            "Entities could not be saved": "Entities konnten nicht gespeichert werden"
         },
         "en": {
             "Manufacturer": "Manufacturer",

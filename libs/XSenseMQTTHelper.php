@@ -113,7 +113,15 @@ trait XSenseMQTTHelper
         if (!$this->debugFlagCache) {
             return;
         }
-        $data = $args === [] ? $format : vsprintf($this->t($format), $args);
+        $data = $format;
+        if ($args !== []) {
+            try {
+                $data = vsprintf($this->t($format), $args);
+            } catch (\ValueError $e) {
+                // eine Übersetzung mit anderer Platzhalterzahl darf die Verarbeitung nicht abbrechen
+                $data = $format . ' ' . json_encode($args, JSON_UNESCAPED_UNICODE);
+            }
+        }
         $this->SendDebug($this->t($message), $data, 0);
     }
 
