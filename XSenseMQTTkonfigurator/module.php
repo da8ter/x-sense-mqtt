@@ -22,6 +22,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
+        $this->resetDebugFlagCache();
 
         // Kein Heavy Work vor KR_READY (getBridgeId verbindet ggf. Instanzen)
         if (IPS_GetKernelRunlevel() !== KR_READY) {
@@ -133,7 +134,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
     public function SyncDiscoveryToDevices(): void
     {
         $cache = $this->readCache();
-        $this->debug('SyncDiscovery', sprintf('Cache has %d entries', count($cache)));
+        $this->debug('SyncDiscovery', 'Cache has %d entries', count($cache));
         
         if (empty($cache)) {
             $this->debug('SyncDiscovery', 'Cache is empty - nothing to sync');
@@ -141,11 +142,11 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         }
 
         $instances = IPS_GetInstanceListByModuleID(self::DEVICE_MODULE_GUID);
-        $this->debug('SyncDiscovery', sprintf('Found %d device instances', count($instances)));
+        $this->debug('SyncDiscovery', 'Found %d device instances', count($instances));
         
         foreach ($instances as $instanceId) {
             $deviceId = trim((string)@IPS_GetProperty($instanceId, 'DeviceId'));
-            $this->debug('SyncDiscovery', sprintf('Instance %d has DeviceId=%s', $instanceId, $deviceId));
+            $this->debug('SyncDiscovery', 'Instance %d has DeviceId=%s', $instanceId, $deviceId);
             
             if ($deviceId === '') {
                 continue;
@@ -161,7 +162,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                     $entryDeviceId = (string)($entry['device']['id'] ?? '');
                 }
                 
-                $this->debug('SyncDiscovery', sprintf('Entry %s has DeviceId=%s (comparing to %s)', $uniqueId, $entryDeviceId, $deviceId));
+                $this->debug('SyncDiscovery', 'Entry %s has DeviceId=%s (comparing to %s)', $uniqueId, $entryDeviceId, $deviceId);
                 
                 if ($entryDeviceId === '' || strcasecmp($entryDeviceId, $deviceId) !== 0) {
                     continue;
@@ -169,11 +170,11 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                 
                 $matchCount++;
                 $json = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                $this->debug('SyncDiscovery', sprintf('Sending to instance %d: %s', $instanceId, substr($json, 0, 150)));
+                $this->debug('SyncDiscovery', 'Sending to instance %d: %s', $instanceId, substr($json, 0, 150));
                 @XSND_UpdateDiscovery($instanceId, $json);
             }
             
-            $this->debug('SyncDiscovery', sprintf('Sent %d entries to instance %d', $matchCount, $instanceId));
+            $this->debug('SyncDiscovery', 'Sent %d entries to instance %d', $matchCount, $instanceId);
         }
     }
 
@@ -214,16 +215,16 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
         // @ unterdrückt keine Exceptions — Verbindungsversuch komplett absichern
         try {
             if (function_exists('IPS_IsInstanceCompatible') && !@IPS_IsInstanceCompatible($this->InstanceID, $bridgeId)) {
-                $this->debug('ApplyChanges', sprintf('Bridge #%d is not compatible', $bridgeId));
+                $this->debug('ApplyChanges', 'Bridge #%d is not compatible', $bridgeId);
                 return 0;
             }
 
             if (!@IPS_ConnectInstance($this->InstanceID, $bridgeId)) {
-                $this->debug('ApplyChanges', sprintf('Could not connect to Bridge #%d', $bridgeId));
+                $this->debug('ApplyChanges', 'Could not connect to Bridge #%d', $bridgeId);
                 return 0;
             }
         } catch (Throwable $e) {
-            $this->debug('ApplyChanges', sprintf('Connect to Bridge #%d failed: %s', $bridgeId, $e->getMessage()));
+            $this->debug('ApplyChanges', 'Connect to Bridge #%d failed: %s', $bridgeId, $e->getMessage());
             return 0;
         }
 
@@ -289,7 +290,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                 $result[$uniqueId] = $entry;
             }
         }
-        $this->debug('readCache', sprintf('Bridge #%d: %d entries', $bridgeId, count($result)));
+        $this->debug('readCache', 'Bridge #%d: %d entries', $bridgeId, count($result));
         return $result;
     }
 

@@ -93,12 +93,33 @@ trait XSenseMQTTHelper
         return str_ends_with($topic, '/config');
     }
 
-    private function debug(string $message, string $data): void
+    /** Session-Cache des Debug-Flags — erspart ReadPropertyBoolean pro Nachricht */
+    private ?bool $debugFlagCache = null;
+
+    /**
+     * Debug-Ausgabe mit Fast-Path: Format-Argumente werden erst NACH dem Flag-Check
+     * formatiert, damit im Normalbetrieb (Debug aus) auf dem heißen Pfad keine
+     * sprintf-/String-Arbeit anfällt. Ohne $args wird $format unverändert ausgegeben.
+     */
+    private function debug(string $message, string $format, mixed ...$args): void
     {
-        if (!@$this->ReadPropertyBoolean('Debug')) {
+        if ($this->debugFlagCache === null) {
+            try {
+                $this->debugFlagCache = (bool)$this->ReadPropertyBoolean('Debug');
+            } catch (Throwable $e) {
+                $this->debugFlagCache = false;
+            }
+        }
+        if (!$this->debugFlagCache) {
             return;
         }
-        parent::SendDebug($this->t($message), $data, 0);
+        $data = $args === [] ? $format : vsprintf($this->t($format), $args);
+        $this->SendDebug($this->t($message), $data, 0);
+    }
+
+    private function resetDebugFlagCache(): void
+    {
+        $this->debugFlagCache = null;
     }
 
     private function t(string $text): string

@@ -15,6 +15,11 @@ class XSenseMQTTDevice extends IPSModuleStrict
     private const STATUS_PARENT_INACTIVE = 201;
     private const STATUS_DEVICE_ID_EMPTY = 202;
 
+    // Session-Caches für den heißen Pfad (jede MQTT-Nachricht): erspart das
+    // json_decode des Entities-Attributs und den linearen Topic-Scan pro Nachricht.
+    private ?array $entitiesCache = null;
+    private ?array $topicIndexCache = null;
+
     public function Create(): void
     {
         parent::Create();
@@ -51,6 +56,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
+        $this->resetDebugFlagCache();
 
         // Kein Heavy Work vor KR_READY
         if (IPS_GetKernelRunlevel() !== KR_READY) {
@@ -88,7 +94,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $this->updateReceiveDataFilter();
         $this->SetSummary($this->ReadPropertyString('DeviceId'));
         $this->maintainAllVariables();
-        $this->debug('ApplyChanges', sprintf('Status=102, DeviceId=%s, ParentId=%d', $this->ReadPropertyString('DeviceId'), $parentId));
+        $this->debug('ApplyChanges', 'Status=102, DeviceId=%s, ParentId=%d', $this->ReadPropertyString('DeviceId'), $parentId);
         $this->requestDiscovery();
     }
 
@@ -105,7 +111,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         }
 
         $payload = $this->decodePayload($data['Payload'] ?? '');
-        $this->debug('ReceiveData', sprintf($this->t('Topic=%s Payload=%s'), $topic, $payload));
+        $this->debug('ReceiveData', 'Topic=%s Payload=%s', $topic, $payload);
 
         if ($this->isConfigTopic($topic)) {
             $this->processConfig($topic, $payload);
@@ -121,7 +127,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $entities = $this->readEntities();
         $matches = $this->findEntitiesByTopic($topic, $entities);
         if (empty($matches)) {
-            $this->debug('State', sprintf('No entity for topic=%s (entities=%d)', $topic, count($entities)));
+            $this->debug('State', 'No entity for topic=%s (entities=%d)', $topic, count($entities));
             return '';
         }
 
@@ -129,7 +135,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
         foreach ($matches as $entry) {
             $value = $this->extractValue($state, $entry);
             if ($value === null) {
-                $this->debug('State', sprintf('No value for %s', $entry['ident'] ?? '?'));
+                $this->debug('State', 'No value for %s', $entry['ident'] ?? '?');
                 continue;
             }
             $this->processStatus($entry, $value);
@@ -153,7 +159,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
     public function UpdateDiscovery(string $json): void
     {
-        $this->debug('UpdateDiscovery', sprintf('Received: %s', substr($json, 0, 200)));
+        $this->debug('UpdateDiscovery', 'Received: %s', substr($json, 0, 200));
 
         $entry = json_decode($json, true);
         if (!is_array($entry)) {
@@ -165,6 +171,18 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
     private function applyDiscoveryEntry(array $entry): void
     {
+        $prepared = $this->prepareDiscoveryEntry($entry);
+        if ($prepared !== null) {
+            $this->commitDiscoveryEntries([$prepared]);
+        }
+    }
+
+    /**
+     * Validiert und normalisiert einen Discovery-Eintrag (DeviceId-Abgleich,
+     * suffix/ident). Rückgabe null, wenn der Eintrag nicht zu dieser Instanz gehört.
+     */
+    private function prepareDiscoveryEntry(array $entry): ?array
+    {
         $deviceId = $this->getTopicToken((string)($entry['state_topic'] ?? ''), 3);
         if ($deviceId === '') {
             $deviceId = $this->extractDeviceIdFromEntry($entry);
@@ -172,38 +190,57 @@ class XSenseMQTTDevice extends IPSModuleStrict
         if ($deviceId !== '') {
             $entry['device']['id'] = $deviceId;
         }
-        $this->debug('UpdateDiscovery', sprintf('Extracted DeviceId=%s from entry', $deviceId));
+        $this->debug('UpdateDiscovery', 'Extracted DeviceId=%s from entry', $deviceId);
 
         if ($deviceId === '') {
             $this->debug('UpdateDiscovery', $this->t('DeviceId missing'));
-            return;
+            return null;
         }
 
         $propertyDeviceId = trim($this->ReadPropertyString('DeviceId'));
-        $this->debug('UpdateDiscovery', sprintf('PropertyDeviceId=%s, EntryDeviceId=%s', $propertyDeviceId, $deviceId));
+        $this->debug('UpdateDiscovery', 'PropertyDeviceId=%s, EntryDeviceId=%s', $propertyDeviceId, $deviceId);
 
         if ($propertyDeviceId === '' || strcasecmp($propertyDeviceId, $deviceId) !== 0) {
-            $this->debug('UpdateDiscovery', sprintf('%s (property=%s, entry=%s)', $this->t('DeviceId mismatch'), $propertyDeviceId, $deviceId));
-            return;
+            $this->debug('UpdateDiscovery', '%s (property=%s, entry=%s)', $this->t('DeviceId mismatch'), $propertyDeviceId, $deviceId);
+            return null;
         }
 
         $uniqueId = (string)($entry['unique_id'] ?? '');
         $stateTopic = (string)($entry['state_topic'] ?? '');
         if ($uniqueId === '' || $stateTopic === '') {
             $this->debug('UpdateDiscovery', $this->t('unique_id/state_topic missing'));
-            return;
+            return null;
         }
 
         $entry['suffix'] = $entry['suffix'] ?? $this->extractSuffix($uniqueId);
         $entry['ident'] = $entry['ident'] ?? $this->getIdentForEntry($entry);
 
+        return $entry;
+    }
+
+    /**
+     * Persistiert vorbereitete Discovery-Einträge in EINEM Durchgang: ein
+     * Attribut-Write, ein Filter-Update — statt N Disk-Writes beim Cache-Replay.
+     */
+    private function commitDiscoveryEntries(array $entries): void
+    {
+        if ($entries === []) {
+            return;
+        }
+
         $entities = $this->readEntities();
-        $entities[$uniqueId] = $entry;
+        foreach ($entries as $entry) {
+            $entities[(string)$entry['unique_id']] = $entry;
+        }
         $this->writeEntities($entities);
 
         $this->maintainDeviceVariables();
-        $this->maintainEntityVariable($entry);
-        $this->updateDeviceInfo($entry['device'] ?? []);
+        $lastDevice = [];
+        foreach ($entries as $entry) {
+            $this->maintainEntityVariable($entry);
+            $lastDevice = $entry['device'] ?? [];
+        }
+        $this->updateDeviceInfo($lastDevice);
         $this->updateReceiveDataFilter();
     }
 
@@ -235,7 +272,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
             $this->debug('requestDiscovery', 'DeviceId not set, skipping');
             return;
         }
-        $this->debug('requestDiscovery', sprintf('Reading cache from Bridge %d for DeviceId=%s', $parentId, $deviceId));
+        $this->debug('requestDiscovery', 'Reading cache from Bridge %d for DeviceId=%s', $parentId, $deviceId);
 
         try {
             $raw = @XSNB_GetDiscoveryCache($parentId);
@@ -253,7 +290,9 @@ class XSenseMQTTDevice extends IPSModuleStrict
             return;
         }
 
-        $count = 0;
+        // Alle passenden Einträge sammeln und in EINEM Commit übernehmen —
+        // sonst fallen pro Eintrag ein Attribut-Write und ein Filter-Reset an.
+        $prepared = [];
         foreach ($cache as $topic => $payload) {
             if (!is_string($topic) || !str_ends_with($topic, '/config')) {
                 continue;
@@ -267,11 +306,17 @@ class XSenseMQTTDevice extends IPSModuleStrict
                     continue;
                 }
             }
-            $decoded = $this->decodePayload($payload);
-            $this->processConfig($topic, $decoded);
-            $count++;
+            $entry = $this->buildConfigEntry($topic, $this->decodePayload($payload));
+            if ($entry === null) {
+                continue;
+            }
+            $entry = $this->prepareDiscoveryEntry($entry);
+            if ($entry !== null) {
+                $prepared[] = $entry;
+            }
         }
-        $this->debug('requestDiscovery', sprintf('Processed %d config entries', $count));
+        $this->commitDiscoveryEntries($prepared);
+        $this->debug('requestDiscovery', 'Processed %d config entries', count($prepared));
     }
 
     private function getParentId(): int
@@ -307,13 +352,22 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
     private function processConfig(string $topic, string $payload): void
     {
+        $entry = $this->buildConfigEntry($topic, $payload);
+        if ($entry !== null) {
+            $this->applyDiscoveryEntry($entry);
+        }
+    }
+
+    /** Baut aus einem Config-Payload den normalisierten Discovery-Eintrag (rein, ohne Seiteneffekte). */
+    private function buildConfigEntry(string $topic, string $payload): ?array
+    {
         if ($payload === '') {
-            return;
+            return null;
         }
 
         $cfg = json_decode($payload, true);
         if (!is_array($cfg)) {
-            return;
+            return null;
         }
 
         $uniqueId = trim((string)($cfg['unique_id'] ?? $this->getTopicToken($topic, 2)));
@@ -323,12 +377,12 @@ class XSenseMQTTDevice extends IPSModuleStrict
             $deviceId = $this->getDeviceIdentifier($device);
         }
         if ($uniqueId === '' || $deviceId === '') {
-            return;
+            return null;
         }
 
         $stateTopic = trim((string)($cfg['state_topic'] ?? ''));
         if ($stateTopic === '') {
-            return;
+            return null;
         }
 
         $component = $this->getTopicToken($topic, 4);
@@ -353,7 +407,7 @@ class XSenseMQTTDevice extends IPSModuleStrict
             ]
         ];
 
-        $this->applyDiscoveryEntry($entry);
+        return $entry;
     }
 
     private function processStatus(array $entry, $status): void
@@ -370,30 +424,30 @@ class XSenseMQTTDevice extends IPSModuleStrict
             $payloadOn = (string)($entry['payload_on'] ?? '');
             $payloadOff = (string)($entry['payload_off'] ?? '');
             if ($payloadOn !== '' && $statusStr === $payloadOn) {
-                $this->debug('State', sprintf('%s=%s → true', $ident, $statusStr));
+                $this->debug('State', '%s=%s → true', $ident, $statusStr);
                 $this->SetValue($ident, true);
                 return;
             }
             if ($payloadOff !== '' && $statusStr === $payloadOff) {
-                $this->debug('State', sprintf('%s=%s → false', $ident, $statusStr));
+                $this->debug('State', '%s=%s → false', $ident, $statusStr);
                 $this->SetValue($ident, false);
                 return;
             }
-            $this->debug('State', sprintf($this->t('Unknown status for %s: %s'), $ident, $statusStr));
+            $this->debug('State', 'Unknown status for %s: %s', $ident, $statusStr);
             return;
         }
 
         if ($varType === 2) {
-            $this->debug('State', sprintf('%s=%s → float', $ident, $statusStr));
+            $this->debug('State', '%s=%s → float', $ident, $statusStr);
             $this->SetValue($ident, (float)$status);
             return;
         }
         if ($varType === 1) {
-            $this->debug('State', sprintf('%s=%s → int', $ident, $statusStr));
+            $this->debug('State', '%s=%s → int', $ident, $statusStr);
             $this->SetValue($ident, (int)$status);
             return;
         }
-        $this->debug('State', sprintf('%s=%s', $ident, $statusStr));
+        $this->debug('State', '%s=%s', $ident, $statusStr);
         $this->SetValue($ident, $statusStr);
     }
 
@@ -581,25 +635,38 @@ class XSenseMQTTDevice extends IPSModuleStrict
 
     private function readEntities(): array
     {
+        if ($this->entitiesCache !== null) {
+            return $this->entitiesCache;
+        }
         $raw = $this->ReadAttributeString('Entities');
         $entities = json_decode($raw, true);
-        return is_array($entities) ? $entities : [];
+        $this->entitiesCache = is_array($entities) ? $entities : [];
+        return $this->entitiesCache;
     }
 
     private function writeEntities(array $entities): void
     {
-        $this->WriteAttributeString('Entities', json_encode($entities, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $this->WriteAttributeString('Entities', (string)json_encode($entities, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $this->entitiesCache = $entities;
+        $this->topicIndexCache = null;
     }
 
     private function findEntitiesByTopic(string $topic, array $entities): array
     {
-        $matches = [];
-        foreach ($entities as $entry) {
-            if (($entry['state_topic'] ?? '') === $topic) {
-                $matches[] = $entry;
+        if ($this->topicIndexCache === null) {
+            $index = [];
+            foreach ($entities as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+                $stateTopic = (string)($entry['state_topic'] ?? '');
+                if ($stateTopic !== '') {
+                    $index[$stateTopic][] = $entry;
+                }
             }
+            $this->topicIndexCache = $index;
         }
-        return $matches;
+        return $this->topicIndexCache[$topic] ?? [];
     }
 
     private function sanitizeIdent(string $value): string

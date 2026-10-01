@@ -57,6 +57,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
+        $this->resetDebugFlagCache();
 
         // Kein Heavy Work vor KR_READY
         if (IPS_GetKernelRunlevel() !== KR_READY) {
@@ -170,7 +171,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
             return '';
         }
 
-        $this->debug('ReceiveData', sprintf($this->t('Topic=%s'), $topic));
+        $this->debug('ReceiveData', 'Topic=%s', $topic);
 
         $root = $this->normalizeTopicRoot($this->ReadPropertyString('TopicRoot'));
         if (!str_starts_with($topic, $root . '/')) {
@@ -189,7 +190,7 @@ class XSenseMQTTBridge extends IPSModuleStrict
         }
 
         if (str_ends_with($topic, '/config')) {
-            $this->debug('Config', sprintf('Topic=%s PayloadLen=%d', $topic, strlen($payloadStr)));
+            $this->debug('Config', 'Topic=%s PayloadLen=%d', $topic, strlen($payloadStr));
             $this->updateDiscoveryCache($topic, $payloadStr);
         }
 
@@ -222,14 +223,14 @@ class XSenseMQTTBridge extends IPSModuleStrict
     public function GetDiscoveryCache(): string
     {
         $cache = $this->ReadAttributeString('DiscoveryCache');
-        $this->debug('GetDiscoveryCache', sprintf('Returning cache length=%d', strlen($cache)));
+        $this->debug('GetDiscoveryCache', 'Returning cache length=%d', strlen($cache));
         return $cache;
     }
 
     public function ReplayDiscovery(string $deviceId = ''): void
     {
         $cache = $this->readDiscoveryCache();
-        $this->debug('ReplayDiscovery', sprintf('Cache has %d entries, filter DeviceId=%s', count($cache), $deviceId));
+        $this->debug('ReplayDiscovery', 'Cache has %d entries, filter DeviceId=%s', count($cache), $deviceId);
         
         if (empty($cache)) {
             $this->debug('ReplayDiscovery', 'Cache is empty');
@@ -242,15 +243,15 @@ class XSenseMQTTBridge extends IPSModuleStrict
                 continue;
             }
             if ($deviceId !== '' && !$this->matchesDeviceId($deviceId, $topic, $payload)) {
-                $this->debug('ReplayDiscovery', sprintf('Skipping %s (no match)', $topic));
+                $this->debug('ReplayDiscovery', 'Skipping %s (no match)', $topic);
                 continue;
             }
-            $this->debug('ReplayDiscovery', sprintf('Forwarding %s', $topic));
+            $this->debug('ReplayDiscovery', 'Forwarding %s', $topic);
             $this->ForwardToChildren($topic, $payload);
             $sentCount++;
         }
         
-        $this->debug('ReplayDiscovery', sprintf('Sent %d entries', $sentCount));
+        $this->debug('ReplayDiscovery', 'Sent %d entries', $sentCount);
     }
 
     private function normalizeTopicRoot(string $root): string
