@@ -18,7 +18,7 @@ const BRIDGE = '{3B3A2F6D-7E9B-4F2A-9C6A-1F2E3D4C5B6A}';
 const DEVICE = '{C523B0B6-870E-9726-778A-0FF5C6E9656E}';
 const RX = '{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}';
 Kernel::registerModule(['ModuleID' => BRIDGE, 'ModuleName' => 'Bridge-Attrappe', 'ModuleType' => 2, 'Prefix' => 'XSNB', 'Implemented' => [], 'ParentRequirements' => [], 'ChildRequirements' => [RX]]);
-$DID = 'SBS50148995FA_00000001';
+$DID = 'SBS50000000000_00000001';
 $GLOBALS['cache'] = [
     "homeassistant/binary_sensor/$DID/smoke/config" => json_encode(['unique_id' => "{$DID}_smoke", 'name' => 'Smoke Status', 'device_class' => 'smoke', 'state_topic' => "xsense/$DID/smoke/state", 'payload_on' => 'ON', 'payload_off' => 'OFF', 'device' => ['manufacturer' => 'X-SENSE', 'model' => 'XS0B-MR', 'sw_version' => 'v1.3.0']]),
     "homeassistant/binary_sensor/$DID/battery/config" => json_encode(['unique_id' => "{$DID}_battery", 'name' => 'Battery Status', 'device_class' => 'battery', 'state_topic' => "xsense/$DID/battery/state", 'payload_on' => 'LOW', 'payload_off' => 'NORMAL', 'device' => ['manufacturer' => '', 'model' => '']]), // ohne Geräteangaben, absichtlich zuletzt

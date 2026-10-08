@@ -330,7 +330,7 @@ class XSenseMQTTKonfigurator extends IPSModuleStrict
                     'entities' => []
                 ];
             }
-            // Extract entity type from unique_id (e.g., SBS50148995FA_00000001_online -> online)
+            // Extract entity type from unique_id (e.g., SBS50000000000_00000001_online -> online)
             $uniqueId = (string)($entry['unique_id'] ?? '');
             $entityType = '';
             if ($uniqueId !== '') {
