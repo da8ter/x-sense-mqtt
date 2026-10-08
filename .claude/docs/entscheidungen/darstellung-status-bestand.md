@@ -1,6 +1,6 @@
 # Darstellung, Status und Entity-Bestand
 
-Die Module lesen Home-Assistant-MQTT-Discovery (`{TopicRoot}/<komponente>/<gerät>/<entity>/config`) und die zugehörigen `state`-Nachrichten. Hier die Entscheidungen aus der Umstellung auf Symcon 9.1 (Version 0.4, Oktober 2026). Plattformregeln (Darstellungs-Parameter, HEX-Datenfluss unter Module Strict) stehen im Plattformwissen: `../List/docs/plattform/`.
+Die Module lesen Home-Assistant-MQTT-Discovery (`{TopicRoot}/<komponente>/<gerät>/<entity>/config`) und die zugehörigen `state`-Nachrichten. Hier die Entscheidungen aus der Umstellung auf Symcon 9.1 (Version 0.4, Oktober 2026). Plattformregeln (Darstellungs-Parameter, HEX-Datenfluss unter Module Strict) stehen im Plattformwissen: `../List/.claude/docs/plattform/`.
 
 ## Entscheidungen
 

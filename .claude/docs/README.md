@@ -15,7 +15,7 @@ Jede Datei endet mit „Stand: geprüft gegen den Code am …“. Ändert ein Co
 
 ## Symcon-Plattform
 
-Gemessenes Symcon-Verhalten für alle Module: https://github.com/da8ter/SymDo-Family-Organizer/tree/SymDo-Beta/docs/plattform (lokal `../List/docs/plattform/`).
+Gemessenes Symcon-Verhalten für alle Module: https://github.com/da8ter/SymDo-Family-Organizer/tree/SymDo-Beta/.claude/docs/plattform (lokal `../List/.claude/docs/plattform/`).
 
 ## Stand
 
