@@ -142,9 +142,41 @@ class XSenseMQTTSecurityCenter extends IPSModuleStrict
             return '';
         }
         // JSON_HEX_TAG ist Pflicht: ein „</script>" in einem Gerätenamen beendete sonst den Block
-        $payload = json_encode($this->buildState(),
+        $state = $this->buildState();
+        $payload = json_encode($state,
             JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        return $html . '<script>handleMessage(' . $payload . ');</script>';
+        $images = json_encode((object)$this->deviceImages(array_column($state['devices'], 'model')),
+            JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
+        return $html . '<script>setDeviceImages(' . $images . ');handleMessage(' . $payload . ');</script>';
+    }
+
+    /**
+     * Gerätefotos (mit Freigabe von X-Sense) aus assets/<Modell>.png bzw. .webp/.jpg — nur für die
+     * Modelle, die es hier gibt, und nur einmal im Seitenaufbau, nie in den Pushes.
+     *
+     * @param list<string> $models
+     * @return array<string, string> Modell → data-URI
+     */
+    private function deviceImages(array $models): array
+    {
+        $types = ['png' => 'image/png', 'webp' => 'image/webp', 'jpg' => 'image/jpeg'];
+        $images = [];
+        foreach (array_unique($models) as $model) {
+            if ($model === '' || !preg_match('/^[A-Za-z0-9_-]+$/', $model)) {
+                continue; // das Modell kommt aus der Discovery: nie als Pfad verwenden, was kein Modellname ist
+            }
+            foreach ($types as $extension => $mime) {
+                $file = __DIR__ . '/assets/' . $model . '.' . $extension;
+                if (is_file($file)) {
+                    $data = @file_get_contents($file);
+                    if (is_string($data) && $data !== '') {
+                        $images[$model] = 'data:' . $mime . ';base64,' . base64_encode($data);
+                    }
+                    break;
+                }
+            }
+        }
+        return $images;
     }
 
     public function GetConfigurationForm(): string
