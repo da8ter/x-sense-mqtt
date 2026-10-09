@@ -173,6 +173,51 @@ class XSenseMQTTDevice extends IPSModuleStrict
         $this->commitDiscoveryEntries($this->prepareDiscoveryEntries([$entry]));
     }
 
+    /**
+     * Für die Sicherheitszentrale: welche Variable welche Entität trägt. Ohne Werte — die liest
+     * die Kachel selbst, damit ein Push nie einen älteren Stand zeigt. Nur lesend.
+     */
+    public function GetEntityMap(): string
+    {
+        $entities = [];
+        foreach ($this->readEntities() as $uniqueId => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $ident = (string)($entry['ident'] ?? '');
+            $entities[] = [
+                'uniqueId'    => (string)$uniqueId,
+                'suffix'      => (string)($entry['suffix'] ?? ''),
+                'component'   => (string)($entry['component'] ?? ''),
+                'deviceClass' => (string)($entry['device_class'] ?? ''),
+                'name'        => (string)($entry['name'] ?? ''),
+                'unit'        => (string)($entry['unit_of_measurement'] ?? ''),
+                'ident'       => $ident,
+                'varId'       => $this->variableIdForIdent($ident)
+            ];
+        }
+        $modelId = $this->variableIdForIdent('Model');
+        $firmwareId = $this->variableIdForIdent('Firmware');
+        $json = json_encode([
+            'deviceId'      => trim($this->ReadPropertyString('DeviceId')),
+            'model'         => $modelId > 0 ? (string)GetValue($modelId) : '',
+            'firmware'      => $firmwareId > 0 ? (string)GetValue($firmwareId) : '',
+            'lastSeenVarId' => $this->variableIdForIdent('LastSeen'),
+            'entities'      => $entities
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        return is_string($json) ? $json : '{}';
+    }
+
+    /** 0, wenn es die Variable (noch) nicht gibt — GetIDForIdent würde unter Module Strict werfen. */
+    private function variableIdForIdent(string $ident): int
+    {
+        if ($ident === '') {
+            return 0;
+        }
+        $id = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
+        return is_int($id) && $id > 0 ? $id : 0;
+    }
+
     private function getParentId(): int
     {
         $inst = @IPS_GetInstance($this->InstanceID);

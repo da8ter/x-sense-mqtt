@@ -52,7 +52,8 @@
             "Device ID is empty": "Geräte-ID ist leer",
             "Donations / Gifts": "Spenden / Geschenke",
             "Say thank you and support the developer of this module:": "Sag Danke und unterstütze den Entwickler dieses Moduls:",
-            "Entities could not be saved": "Entities konnten nicht gespeichert werden"
+            "Entities could not be saved": "Entities konnten nicht gespeichert werden",
+            "Smoke Fault Status": "Rauchsensor-Störung"
         },
         "en": {
             "Manufacturer": "Manufacturer",
@@ -105,7 +106,8 @@
             "Bridge inactive": "Bridge inactive",
             "Device ID is empty": "Device ID is empty",
             "Donations / Gifts": "Donations / Gifts",
-            "Say thank you and support the developer of this module:": "Say thank you and support the developer of this module:"
+            "Say thank you and support the developer of this module:": "Say thank you and support the developer of this module:",
+            "Smoke Fault Status": "Smoke Fault Status"
         }
     }
 }

@@ -26,17 +26,24 @@ trait XSenseMQTTDeviceDiscovery
      */
     private function prepareDiscoveryEntries(array $entries): array
     {
+        $stored = $this->readEntities();
+        $taken = $this->identOwners($stored);
         $prepared = [];
         foreach ($entries as $entry) {
-            $entry = $this->prepareDiscoveryEntry($entry);
+            $entry = $this->prepareDiscoveryEntry($entry, $stored, $taken);
             if ($entry !== null) {
+                $taken[strtolower((string)$entry['ident'])] = (string)$entry['unique_id'];
                 $prepared[] = $entry;
             }
         }
         return $prepared;
     }
 
-    private function prepareDiscoveryEntry(array $entry): ?array
+    /**
+     * @param array<string, array<string, mixed>> $stored Bestand: ein dort vergebener Ident bleibt
+     * @param array<string, string> $taken Ident (klein) → unique_id, auch aus diesem Durchgang
+     */
+    private function prepareDiscoveryEntry(array $entry, array $stored, array $taken): ?array
     {
         $deviceId = $this->getTopicToken((string)($entry['state_topic'] ?? ''), 3);
         if ($deviceId === '') {
@@ -68,7 +75,9 @@ trait XSenseMQTTDeviceDiscovery
         }
 
         $entry['suffix'] = $entry['suffix'] ?? $this->extractSuffix($uniqueId);
-        $entry['ident'] = $entry['ident'] ?? $this->getIdentForEntry($entry);
+        $storedIdent = (string)($stored[$uniqueId]['ident'] ?? '');
+        $keep = $storedIdent !== '' && ($taken[strtolower($storedIdent)] ?? $uniqueId) === $uniqueId;
+        $entry['ident'] = $keep ? $storedIdent : $this->assignIdent($entry, $taken);
 
         return $entry;
     }

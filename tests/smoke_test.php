@@ -79,6 +79,55 @@ Kernel::$variables[$smokeId]['customPresentation'] = ['PRESENTATION' => VARIABLE
 IPS_ApplyChanges($dev);
 check(IPS_GetVariableCustomPresentation($smokeId) !== [], 'nach der Migration fasst ApplyChanges Benutzer-Darstellungen nicht mehr an');
 
+section('Zwei Entitäten mit device_class problem (Lebensende, Störung)');
+// Aufbau wie die echte SBS50: unique_id <Gerät>_<suffix>, state_topic unter homeassistant/
+$DID2 = 'SBS50000000000_00000002';
+$real = static function (string $did, string $suffix, string $name, string $class, string $on, string $off): array {
+    $base = "homeassistant/binary_sensor/$did/{$did}_$suffix";
+    return ["$base/config" => json_encode(['name' => $name, 'unique_id' => "{$did}_$suffix", 'state_topic' => "$base/state",
+        'device_class' => $class, 'payload_on' => $on, 'payload_off' => $off, 'value_template' => '{{ value_json.status }}',
+        'device' => ['identifiers' => [$did], 'manufacturer' => 'X-SENSE', 'model' => 'XS0B-MR', 'sw_version' => 'v1.3.0']])];
+};
+$GLOBALS['cache'] = array_merge($GLOBALS['cache'],
+    $real($DID2, 'online', 'Online Status', 'connectivity', 'Online', 'Offline'),
+    $real($DID2, 'battery', 'Battery Status', 'battery', 'Low', 'Normal'),
+    $real($DID2, 'lifeend', 'End of Life', 'problem', 'EOL', 'Normal'),
+    $real($DID2, 'smokealarm', 'Smoke Status', 'smoke', 'Detected', 'Cleared'),
+    $real($DID2, 'smokefault', 'Smoke Fault Status', 'problem', 'Fault', 'Normal'));
+$dev2 = Kernel::createInstance(DEVICE);
+Kernel::$instances[$dev2]['connection'] = $bridge;
+IPS_SetProperty($dev2, 'DeviceId', $DID2);
+IPS_ApplyChanges($dev2);
+$ids2 = World::idents($dev2);
+check(in_array('Problem', $ids2, true) && in_array('Smokefault', $ids2, true), 'Lebensende und Störung je eigene Variable: ' . implode(',', $ids2));
+$state = static fn(string $suffix, string $status) => Kernel::sendToChildren($bridge, json_encode(['DataID' => RX,
+    'Topic' => "homeassistant/binary_sensor/$DID2/{$DID2}_$suffix/state", 'Payload' => json_encode(['status' => $status])]));
+$state('lifeend', 'Normal');
+$state('smokefault', 'Fault');
+check(World::value($dev2, 'Smokefault') === true && World::value($dev2, 'Problem') === false, 'Störung setzt nicht mehr das Lebensende');
+$problemId = World::varId($dev2, 'Problem');
+// Bestand bis 0.4: beide Einträge mit Ident Problem
+$ent2 = json_decode((string)World::attr($dev2, 'Entities'), true);
+$ent2["{$DID2}_smokefault"]['ident'] = 'Problem';
+Kernel::$instances[$dev2]['attributes']['Entities'] = json_encode($ent2);
+IPS_ApplyChanges($dev2);
+$ent2 = json_decode((string)World::attr($dev2, 'Entities'), true);
+check($ent2["{$DID2}_lifeend"]['ident'] === 'Problem' && $ent2["{$DID2}_smokefault"]['ident'] === 'Smokefault' && World::varId($dev2, 'Problem') === $problemId,
+    'Bereinigung: Lebensende behält Problem (gleiche Variable), Störung bekommt Smokefault');
+// derselbe Bestand, aber die Config kommt vor dem nächsten ApplyChanges
+$ent2["{$DID2}_smokefault"]['ident'] = 'Problem';
+Kernel::$instances[$dev2]['attributes']['Entities'] = json_encode($ent2);
+Kernel::sendToChildren($bridge, json_encode(['DataID' => RX, 'Topic' => "homeassistant/binary_sensor/$DID2/{$DID2}_smokefault/config",
+    'Payload' => $GLOBALS['cache']["homeassistant/binary_sensor/$DID2/{$DID2}_smokefault/config"]]));
+check(json_decode((string)World::attr($dev2, 'Entities'), true)["{$DID2}_smokefault"]['ident'] === 'Smokefault', 'Config-Nachricht übernimmt einen fremd belegten Ident nicht');
+
+section('GetEntityMap für die Sicherheitszentrale');
+$map = json_decode((string)Kernel::callPublic($dev2, 'GetEntityMap', []), true);
+$bySuffix = array_column(is_array($map) ? $map['entities'] : [], null, 'suffix');
+check(is_array($map) && $map['deviceId'] === $DID2 && $map['model'] === 'XS0B-MR' && $map['lastSeenVarId'] === World::varId($dev2, 'LastSeen'), 'Gerätedaten und LastSeen-Variable');
+check(count($bySuffix) === 5 && $bySuffix['smokefault']['varId'] === World::varId($dev2, 'Smokefault') && $bySuffix['lifeend']['varId'] === $problemId
+    && $bySuffix['smokealarm']['deviceClass'] === 'smoke' && $bySuffix['online']['component'] === 'binary_sensor', 'fünf Entitäten mit Variable, Klasse und Komponente');
+
 section('Debug robust');
 IPS_SetProperty($dev, 'Debug', true);
 IPS_ApplyChanges($dev);

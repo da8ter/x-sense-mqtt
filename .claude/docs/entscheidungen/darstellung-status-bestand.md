@@ -8,6 +8,7 @@ Die Module lesen Home-Assistant-MQTT-Discovery (`{TopicRoot}/<komponente>/<gerä
 - **Altlast einmalig entfernen.** `migrateLegacyPresentations` entfernt je Instanz einmal eine Benutzer-Darstellung, die von 0.3 stammt (Wertanzeige mit `ColorDisplay`), und merkt das im Attribut `PresentationMigrated`. Eine vom Nutzer in der Konsole gesetzte Darstellung bleibt.
 - **Status folgt der Bridge.** 201 ist in diesen Modulen „Elter inaktiv“. Bridge, Konfigurator und Gerät melden sich auf `IM_CHANGESTATUS` ihres Elters an und wenden sich beim Wechsel neu an; ebenso bei `FM_CONNECT`/`FM_DISCONNECT`. Vorher klebte 201 nach einem kurzen Ausfall der Bridge, bis jemand „Übernehmen“ drückte.
 - **Entity-Bestand ohne Datenverlust.** Das Attribut `Entities` wird bei jedem Zugriff gelesen (ein Kernelaufruf), aber nur dekodiert, wenn sich der Text geändert hat; der Topic-Index verfällt mit ihm. `writeEntities` bricht bei einem `json_encode`-Fehler ab und loggt `KL_ERROR`, der alte Bestand bleibt.
+- **Ein Ident je Entität.** Der Ident kommt aus `device_class` (sonst `name`), ist aber nur zu haben, wenn keine andere Entität desselben Geräts ihn schon trägt; sonst gilt `ucfirst(suffix)`, zuletzt `Entity_<unique_id>`. Ein gespeicherter Ident bleibt. Grund (gemessen 09.10.2026 an einer SBS50 mit XS0B-MR): X-Sense meldet `lifeend` UND `smokefault` mit `device_class: problem`; bis 0.4 teilten sich beide die Variable `Problem`, eine Rauchsensor-Störung setzte das „Lebensende". `deduplicateIdents` trennt Bestände in jedem ApplyChanges (idempotent): der erste Eintrag behält `Problem` (also die Variable „End of Life" samt Archiv), die Störung bekommt `Smokefault`.
 - **Discovery-Cache in der Bridge.** Die Bridge hält die Config-Nachrichten (`DiscoveryCache`), ein neues Gerät holt sie per `XSNB_GetDiscoveryCache`, der Konfigurator stößt `XSNB_ReplayDiscovery` an. Modul-zu-Modul läuft über öffentliche Präfix-Funktionen.
 - **Debug ohne Kosten im Normalbetrieb.** `debug()` prüft die Property `Debug` einmal je Lauf und formatiert nur bei eingeschaltetem Debug.
 - **Payload-Dekodierung:** HEX wird nur dekodiert, wenn der Text eine gerade Anzahl Hex-Zeichen hat (`decodePayload`). Native Eltern liefern einem `IPSModuleStrict`-Kind die Nutzlast HEX-kodiert (Plattformwissen `module-strict-und-php.md`); für den MQTT Server selbst ist das dort nicht eigens gemessen.
@@ -16,4 +17,4 @@ Die Module lesen Home-Assistant-MQTT-Discovery (`{TopicRoot}/<komponente>/<gerä
 
 - Ein Status-Text wie `abcd`, der zufällig aus Hex-Zeichen gerader Länge besteht, würde fälschlich dekodiert. Bei X-Sense bisher nicht beobachtet (nicht am Code prüfbar).
 
-Stand: geprüft gegen den Code am 08.10.2026
+Stand: geprüft gegen den Code am 09.10.2026

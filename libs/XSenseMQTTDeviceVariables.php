@@ -75,7 +75,7 @@ trait XSenseMQTTDeviceVariables
     /** ApplyChanges: alle Variablen des Bestands; die einmalige Bereinigung alter Darstellungen hängt hier. */
     private function maintainAllVariables(): void
     {
-        $entities = $this->readEntities();
+        $entities = $this->deduplicateIdents($this->readEntities());
         $this->migrateLegacyPresentations($entities);
         if (empty($entities)) {
             return;
@@ -219,6 +219,81 @@ trait XSenseMQTTDeviceVariables
             return 2; // float (sensor without unit is typically numeric)
         }
         return 3; // string (safe default)
+    }
+
+    /**
+     * Freier Ident für einen Eintrag: der aus device_class/name, sonst der aus dem Suffix, sonst
+     * Entity_<unique_id>. Nötig, weil X-Sense zwei Entitäten mit device_class "problem" meldet
+     * (lifeend, smokefault) — mit einem gemeinsamen Ident schrieb eine Störung das Lebensende.
+     *
+     * @param array<string, string> $taken Ident (klein) → unique_id des Besitzers
+     */
+    private function assignIdent(array $entry, array $taken): string
+    {
+        $uniqueId = (string)($entry['unique_id'] ?? '');
+        $candidates = [$this->getIdentForEntry($entry)];
+        $suffix = (string)($entry['suffix'] ?? '');
+        if ($suffix !== '') {
+            $candidates[] = $this->sanitizeIdent(ucfirst($suffix));
+        }
+        $candidates[] = $this->sanitizeIdent('Entity_' . $uniqueId);
+        foreach ($candidates as $ident) {
+            $owner = $taken[strtolower($ident)] ?? null;
+            if ($owner === null || $owner === $uniqueId) {
+                return $ident;
+            }
+        }
+        return $candidates[count($candidates) - 1];
+    }
+
+    /**
+     * Wer welchen Ident belegt; die festen Gerätevariablen gehören keiner Entität.
+     *
+     * @param array<string, array<string, mixed>> $entities
+     * @return array<string, string> Ident (klein) → unique_id
+     */
+    private function identOwners(array $entities): array
+    {
+        $owners = ['manufacturer' => '', 'model' => '', 'firmware' => '', 'lastseen' => ''];
+        foreach ($entities as $uniqueId => $entry) {
+            $ident = is_array($entry) ? (string)($entry['ident'] ?? '') : '';
+            if ($ident !== '' && !isset($owners[strtolower($ident)])) {
+                $owners[strtolower($ident)] = (string)$uniqueId;
+            }
+        }
+        return $owners;
+    }
+
+    /**
+     * Bestand bis 0.4: Einträge mit gleichem Ident teilten sich eine Variable. Der erste behält
+     * ihn (Variable, Archiv und Links bleiben), die übrigen bekommen einen freien. Idempotent,
+     * schreibt nur bei einer Änderung.
+     *
+     * @param array<string, array<string, mixed>> $entities
+     * @return array<string, array<string, mixed>>
+     */
+    private function deduplicateIdents(array $entities): array
+    {
+        $taken = ['manufacturer' => '', 'model' => '', 'firmware' => '', 'lastseen' => ''];
+        $changed = false;
+        foreach ($entities as $uniqueId => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $ident = (string)($entry['ident'] ?? '');
+            $owner = $ident !== '' ? ($taken[strtolower($ident)] ?? null) : null;
+            if ($ident === '' || ($owner !== null && $owner !== (string)$uniqueId)) {
+                $entry['ident'] = $this->assignIdent($entry + ['unique_id' => (string)$uniqueId], $taken);
+                $entities[$uniqueId] = $entry;
+                $changed = true;
+                $this->debug('Migration', 'ident %s → %s for %s', $ident, $entry['ident'], (string)$uniqueId);
+            }
+            $taken[strtolower((string)$entry['ident'])] = (string)$uniqueId;
+        }
+        if ($changed) {
+            $this->writeEntities($entities);
+        }
+        return $entities;
     }
 
     private function getIdentForEntry(array $entry): string

@@ -54,7 +54,7 @@ Model | string | Wertanzeige | Modell
 Firmware | string | Wertanzeige | Firmware-Version
 LastSeen | integer | Datum/Uhrzeit | Zeitpunkt der letzten gültigen Statusnachricht
 
-Entity-Variablen werden automatisch aus der MQTT Discovery-Config angelegt. Der Variablenname wird aus dem Config-Feld `name` übernommen, der Ident aus `device_class` oder dem sanitisierten Namen. Boolean-Variablen erhalten eine Wertanzeige mit dem `payload_on`/`payload_off`-Text als Beschriftung (z.B. "Cleared", "Online").
+Entity-Variablen werden automatisch aus der MQTT Discovery-Config angelegt. Der Variablenname wird aus dem Config-Feld `name` übernommen, der Ident aus `device_class` oder dem sanitisierten Namen. Ist dieser Ident im Gerät schon vergeben (X-Sense meldet „End of Life“ und „Smoke Fault Status“ beide als `problem`), bekommt die Entität einen Ident aus dem Ende ihrer `unique_id`, z. B. `Smokefault`. Boolean-Variablen erhalten eine Wertanzeige mit dem `payload_on`/`payload_off`-Text als Beschriftung (z.B. "Cleared", "Online").
 
 ### 6. Visualisierung
 
@@ -64,6 +64,9 @@ Das Modul stellt keine eigene Visualisierung bereit.
 
 `void XSND_UpdateDiscovery(int $InstanzID, string $Json);`  
 Interne Schnittstelle für den Konfigurator, um Entity-Metadaten zu aktualisieren.
+
+`string XSND_GetEntityMap(int $InstanzID);`  
+Liefert als JSON, welche Variable welche Entität trägt (`deviceClass`, `component`, Suffix, Variablen-ID), dazu Modell, Firmware und die Variable „Zuletzt gesehen“. Schnittstelle für die Sicherheitszentrale.
 
 ### 8. Versionshistorie
 
