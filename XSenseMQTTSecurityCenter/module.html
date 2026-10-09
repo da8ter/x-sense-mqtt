@@ -256,8 +256,10 @@ body {
 .zeile-g .syms { flex: none; display: flex; gap: 2px; }
 
 /* ── Raster (große Kachel) ────────────────────────────────────────────── */
-#raster { display: none; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; padding-bottom: 2px; }
+/* Karten füllen jede Zeile ganz, auch die letzte: Flex statt Grid, Mindestbreite 380 px */
+#raster { display: none; flex-wrap: wrap; gap: 10px; padding-bottom: 2px; }
 .karte {
+  flex: 1 1 380px;
   display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 14px;
   background: var(--surface); border: 1px solid var(--border); cursor: pointer; min-width: 0;
 }
@@ -307,7 +309,7 @@ body {
 }
 @media (min-width: 520px) and (min-height: 380px) {
   #liste { display: none; }
-  #raster { display: grid; }
+  #raster { display: flex; }
   #status { padding: 14px 16px; }
   #status .schild { width: 48px; height: 48px; font-size: 24px; }
   #status .titel { font-size: 20px; }
