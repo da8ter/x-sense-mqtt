@@ -128,6 +128,32 @@ check(is_array($map) && $map['deviceId'] === $DID2 && $map['model'] === 'XS0B-MR
 check(count($bySuffix) === 5 && $bySuffix['smokefault']['varId'] === World::varId($dev2, 'Smokefault') && $bySuffix['lifeend']['varId'] === $problemId
     && $bySuffix['smokealarm']['deviceClass'] === 'smoke' && $bySuffix['online']['component'] === 'binary_sensor', 'fünf Entitäten mit Variable, Klasse und Komponente');
 
+section('Einordnung der Sicherheitszentrale');
+require_once $lib . '/libs/XSenseMQTTSecurityClassifier.php';
+$C = XSenseMQTTSecurityClassifier::class;
+$roles = array_map(static fn(array $e): string => $C::role($e), $bySuffix);
+check($roles === ['online' => 'online', 'battery' => 'battery', 'lifeend' => 'lifeEnd', 'smokealarm' => 'alarm', 'smokefault' => 'fault'], 'Rollen aus device_class und Suffix: ' . json_encode($roles));
+$device = static function (array $values, int $status = 102, int $lastSeen = 0, int $staleHours = 0) use ($bySuffix): array {
+    $entities = [];
+    foreach ($bySuffix as $suffix => $e) {
+        $entities[] = $e + ['value' => $values[$suffix] ?? false];
+    }
+    return XSenseMQTTSecurityClassifier::evaluateDevice(['entities' => $entities, 'instanceStatus' => $status, 'bridgeStatus' => 102,
+        'lastSeen' => $lastSeen, 'now' => 100000, 'staleHours' => $staleHours]);
+};
+$ok = $device(['online' => true]);
+check($ok['level'] === 0 && $ok['issues'] === [] && array_column($ok['indicators'], 'key') === ['alarm', 'fault', 'battery', 'lifeEnd', 'online'], 'alles normal → OK, feste Symbolreihenfolge');
+check($device(['online' => true, 'smokealarm' => true])['level'] === 2 && $device(['online' => true, 'smokealarm' => true])['indicators'][0]['kind'] === 'smoke', 'Detected → Alarm (Rauch)');
+foreach (['smokefault' => 'fault', 'lifeend' => 'lifeEnd', 'battery' => 'battery'] as $suffix => $issue) {
+    $r = $device(['online' => true, $suffix => true]);
+    check($r['level'] === 1 && $r['issues'] === [$issue], "$suffix an → Hinweis $issue");
+}
+check($device(['online' => false])['issues'] === ['offline'], 'Offline → Hinweis');
+check($device(['online' => true], 201)['issues'] === ['connection'], 'Instanz nicht aktiv → Verbindung gestört');
+check($device(['online' => true], 102, 100000 - 7200, 1)['issues'] === ['stale'] && $device(['online' => true], 102, 100000 - 1800, 1)['issues'] === [], 'keine Meldung seit mehr als StaleHours → Hinweis');
+$all = $C::overall([$ok, $device(['online' => false]), $device(['online' => true, 'smokealarm' => true])]);
+check($all === ['level' => 2, 'total' => 3, 'alarms' => 1, 'warnings' => 1, 'online' => 2], 'Gesamtstand: ' . json_encode($all));
+
 section('Debug robust');
 IPS_SetProperty($dev, 'Debug', true);
 IPS_ApplyChanges($dev);

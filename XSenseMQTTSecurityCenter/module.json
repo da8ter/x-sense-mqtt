@@ -1,0 +1,14 @@
+{
+    "id": "{7CB0D57B-05E3-42DD-A001-EF5C96C1425B}",
+    "name": "X Sense MQTT Security Center",
+    "type": 3,
+    "vendor": "da8ter",
+    "aliases": [
+        "X-Sense Sicherheitszentrale"
+    ],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "XSNS",
+    "url": "https://github.com/da8ter/x-sense-mqtt"
+}
