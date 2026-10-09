@@ -10,7 +10,8 @@ Jede Datei endet mit „Stand: geprüft gegen den Code am …“. Ändert ein Co
 
 ## Testen
 
-- **Rauchtest:** `php tests/smoke_test.php` — Gerätemodul mit Bridge-Attrappe im Prüfstand-Kernel der LG-ThinQ-Bibliothek. Setzt den Nachbarordner `../LGThinQ` voraus (`tests/bootstrap.php`, Symcon 9.1 im Speicher samt Darstellungsregeln); fehlt er, bricht der Test mit Hinweis ab. Am 08.10.2026: 19 Prüfungen grün.
+- **Rauchtest:** `php tests/smoke_test.php` — Gerätemodul mit Bridge-Attrappe im Prüfstand-Kernel der LG-ThinQ-Bibliothek. Setzt den Nachbarordner `../LGThinQ` voraus (`tests/bootstrap.php`, Symcon 9.1 im Speicher samt Darstellungsregeln); fehlt er, bricht der Test mit Hinweis ab. Prüft auch die Ident-Regel und die Einordnung der Sicherheitszentrale mit den echten SBS50-Payloads. Am 09.10.2026: 35 Prüfungen grün.
+- **Kachel:** Der Prüfstand kennt das HTML-SDK nicht. Die Sicherheitszentrale wird im Docker-Symcon geprüft: Zustände per `XSNB_ForwardToChildren` auf der Bridge einspielen, Bilder mit dem `kachel-screenshot.py` des Skills `symdo-release`, Pushes über die Debug-Zeile „Push“; danach alles zurücksetzen.
 - Sonst `php -l` auf geänderte Dateien.
 
 ## Symcon-Plattform
@@ -21,4 +22,4 @@ Gemessenes Symcon-Verhalten für alle Module: https://github.com/da8ter/SymDo-Fa
 
 [stand.md](stand.md) – Offenes.
 
-Stand: geprüft gegen den Code am 08.10.2026
+Stand: geprüft gegen den Code am 09.10.2026
