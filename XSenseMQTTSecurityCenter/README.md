@@ -53,7 +53,7 @@ Die Kachel richtet sich nach ihrer Größe:
 - **klein:** Gesamtstatus und Geräteliste mit Statussymbolen
 - **groß / vergrößert:** Gesamtstatus und ein Raster mit einer Karte je Gerät (Modell, Hinweise, letzte Meldung)
 
-Liegt im Modulordner `assets/<Modell>.png` (oder `.webp`/`.jpg`, z. B. `assets/XS0B-MR.png`), zeigt die Karte das Gerätefoto. Die Fotos werden nur für vorhandene Modelle und nur einmal beim Laden der Kachel übertragen.
+Die Karten zeigen eine Zeichnung des Geräts (Rauch-, Kombi-, CO-, Hitze- und Wassermelder, Basisstation, Thermo-Hygrometer, Bewegungsmelder, Tür-/Fensterkontakt, Tastenfeld); unbekannte Modelle bekommen die Zeichnung ihrer Alarmart. Ein eigenes Foto unter `assets/<Modell>.png` (oder `.webp`/`.jpg`, z. B. `assets/XS0B-MR.png`) ersetzt die Zeichnung. Die Fotos werden nur für vorhandene Modelle und nur einmal beim Laden der Kachel übertragen.
 
 Ein Klick auf ein Gerät öffnet dessen Instanz. Bei einem Alarm pulsiert der Gesamtstatus zweimal und bleibt dann rot.
 

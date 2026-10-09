@@ -267,8 +267,10 @@ body {
 .karte .kopf .texte { flex: 1; min-width: 0; }
 .karte .foto {
   flex: none; width: 52px; height: 52px; border-radius: 12px; object-fit: contain;
-  background: color-mix(in srgb, #fff 92%, var(--content-color, #f2f2f7) 8%); padding: 4px; box-sizing: border-box;
+  background: #fff; padding: 3px; box-sizing: border-box;
 }
+.karte .geraet { flex: none; width: 52px; height: 52px; }
+.karte .geraet svg { width: 100%; height: 100%; display: block; }
 .karte .name { font-size: 15px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .karte .modell { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .karte .marke {
@@ -373,6 +375,91 @@ const ICON = {
 };
 const ICON_OK = { battery: 'battery-full' };
 
+/* Eigene Geräte-Illustrationen (nach Form, ohne Logo/Schrift des Herstellers), viewBox 64×64.
+   Weißer Kunststoff: Körper hell mit grauer Kante, damit er auf dunklen und hellen Karten steht. */
+const GERAET_SVG = (function () {
+  const K = '#eef0f3', KR = '#b4bac3', I = '#f9fafb', G = '#b9c0c8', D = '#3d444c', BLAU = '#4aa8ff', LCD = '#8fd3f7', LCDR = '#5aa9d6';
+  const svg = (inhalt) => '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + inhalt + '</svg>';
+  const scheibe = (r) => '<circle cx="32" cy="32" r="' + r + '" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>';
+  const punktring = (r) => '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="' + G + '" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="0 2.7"/>';
+  const lcd = (x, y, w, h) =>
+    '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="1.6" fill="' + LCD + '" stroke="' + LCDR + '" stroke-width="1"/>' +
+    '<rect x="' + (x + w * 0.42) + '" y="' + (y + h * 0.25) + '" width="' + (w * 0.4) + '" height="' + (h * 0.5) + '" rx=".6" fill="#2b5f80" opacity=".75"/>';
+  return {
+    // runder Rauchmelder, Lochgitter, LED-Ring in der Mitte (XS0B-MR)
+    smoke: svg(scheibe(29) + '<circle cx="32" cy="32" r="24" fill="' + I + '"/>' + punktring(20) + punktring(16.5) + punktring(13) +
+      '<circle cx="32" cy="32" r="8" fill="#fff" stroke="#ff5a6e" stroke-width="2.2"/>'),
+    // kompakter Rauchmelder, Lochgitter bis zur Mitte, dunkle Messkammer-Öffnung (XS01-M)
+    smokeDot: svg(scheibe(29) + '<circle cx="32" cy="32" r="24" fill="' + I + '"/>' + punktring(20.5) + punktring(17) + punktring(13.5) + punktring(10) +
+      '<circle cx="32" cy="32" r="4.2" fill="' + D + '"/><rect x="10" y="13" width="9" height="4" rx="2" transform="rotate(-38 14.5 15)" fill="#ff6b6b"/>'),
+    // Rauch-/CO-Kombimelder mit Display (SC07-MR, XP0A-MR)
+    smokeDisplay: svg(scheibe(29) + '<circle cx="32" cy="32" r="24" fill="' + I + '"/>' + punktring(21) + punktring(17.5) + lcd(22, 26, 20, 12)),
+    // Hitzemelder: Kuppel mit Sensorkorb (XH02-M)
+    heat: svg(scheibe(29) + '<circle cx="32" cy="32" r="24" fill="' + I + '"/>' +
+      '<path d="M29 13v4M32 12.5v4.5M35 13v4" stroke="' + D + '" stroke-width="1.6" stroke-linecap="round"/>' +
+      '<circle cx="32" cy="34" r="11" fill="#fff" stroke="#5ccf7a" stroke-width="1.6"/>' +
+      [0, 45, 90, 135, 180, 225, 270, 315].map((w) => '<line x1="32" y1="27" x2="32" y2="30.5" stroke="#9aa3ad" stroke-width="1.6" stroke-linecap="round" transform="rotate(' + w + ' 32 34)"/>').join('') +
+      '<circle cx="32" cy="34" r="2.2" fill="#8a939d"/>'),
+    // CO-Melder, liegende Kapsel mit Display (XC01-M, XC0C-MR)
+    coOval: svg('<rect x="3" y="15" width="58" height="34" rx="17" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      '<rect x="7" y="18.5" width="50" height="27" rx="13.5" fill="' + I + '"/>' + lcd(24, 23, 16, 10) +
+      '<rect x="29" y="36" width="6" height="1.6" rx=".8" fill="#5ccf7a"/><circle cx="13.5" cy="32" r="2.4" fill="#9aa3ad"/>'),
+    // Basisstation: abgerundetes Quadrat mit Eckkerben (SBS50)
+    base: svg('<rect x="6" y="6" width="52" height="52" rx="12" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      '<rect x="9" y="9" width="46" height="46" rx="10" fill="' + I + '"/>' +
+      '<path d="M14 14l4 4M50 14l-4 4M14 50l4-4M50 50l-4-4" stroke="' + G + '" stroke-width="2" stroke-linecap="round"/>' +
+      '<circle cx="32" cy="32" r="3" fill="' + BLAU + '"/>'),
+    // Wassermelder: flacher Puck (SWS51, SWS0A)
+    water: svg(scheibe(28) + '<circle cx="32" cy="32" r="22" fill="' + I + '" stroke="#e1e5ea" stroke-width="1"/>' +
+      '<circle cx="32" cy="15.5" r="1.6" fill="' + BLAU + '"/><circle cx="29.5" cy="21" r="1" fill="#8a939d"/><circle cx="34.5" cy="21" r="1" fill="#8a939d"/>'),
+    // Thermo-Hygrometer mit großem Display (STH0A)
+    thermo: svg('<rect x="8" y="7" width="48" height="50" rx="7" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      '<rect x="12.5" y="11.5" width="39" height="32" rx="3" fill="#dfe4e6" stroke="#c3c8cf" stroke-width="1"/>' +
+      '<rect x="17" y="15.5" width="19" height="9" rx="1.2" fill="' + D + '" opacity=".8"/><rect x="38.5" y="15.5" width="6" height="4" rx="1" fill="' + D + '" opacity=".6"/>' +
+      '<rect x="17" y="28.5" width="14" height="9" rx="1.2" fill="' + D + '" opacity=".8"/><rect x="33.5" y="32.5" width="5" height="5" rx="1" fill="' + D + '" opacity=".6"/>' +
+      '<path d="M16 50h32M16 53h32" stroke="' + G + '" stroke-width="1.2" stroke-linecap="round"/>'),
+    // Temperatursensor in Kieselform (STH51)
+    pebble: svg('<rect x="21" y="4" width="22" height="56" rx="11" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      '<rect x="24" y="7" width="16" height="50" rx="8" fill="' + I + '"/><circle cx="32" cy="16" r="1.8" fill="' + BLAU + '"/>'),
+    // Bewegungsmelder mit Linse (SMS0A)
+    motion: svg('<rect x="8" y="8" width="48" height="48" rx="11" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      '<circle cx="34" cy="30" r="15" fill="#fbfbfc" stroke="#d7dce2" stroke-width="1.2"/><circle cx="16" cy="48" r="1.8" fill="' + BLAU + '"/>'),
+    // Tür-/Fensterkontakt: Magnet und Sensor (SDS0A)
+    door: svg('<rect x="9" y="8" width="10" height="48" rx="3" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      '<rect x="23" y="8" width="32" height="48" rx="5" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      '<rect x="26" y="11" width="26" height="42" rx="3.5" fill="' + I + '"/><rect x="38" y="27" width="2.4" height="8" rx="1.2" fill="' + BLAU + '"/>'),
+    // Tastenfeld (SKP0A)
+    keypad: svg('<rect x="14" y="3" width="36" height="58" rx="6" fill="' + K + '" stroke="' + KR + '" stroke-width="1.5"/>' +
+      [0, 1, 2].map((s) => '<rect x="' + (18.5 + s * 9.5) + '" y="7" width="7.5" height="5.5" rx="1.5" fill="' + I + '" stroke="#d3d8de" stroke-width=".8"/>').join('') +
+      '<circle cx="32" cy="15.5" r="1" fill="' + BLAU + '"/>' +
+      [0, 1, 2, 3].map((z) => [0, 1, 2].map((s) => '<rect x="' + (18.5 + s * 9.5) + '" y="' + (19 + z * 10) + '" width="7.5" height="7.5" rx="1.8" fill="' + I + '" stroke="#d3d8de" stroke-width=".8"/>').join('')).join(''))
+  };
+})();
+const GERAET_MODELL = {
+  'XS0B-MR': 'smoke', 'XS0D-MR': 'smoke', 'XP02S-MR': 'smoke',
+  'XS01-M': 'smokeDot', 'XS01-WX': 'smokeDot', 'XS03-WX': 'smokeDot', 'XS03-iWX': 'smokeDot',
+  'SC07-MR': 'smokeDisplay', 'SC07-WX': 'smokeDisplay', 'SC06-WX': 'smokeDisplay', 'XP0A-MR': 'smokeDisplay',
+  'XH02-M': 'heat',
+  'XC01-M': 'coOval', 'XC04-WX': 'coOval', 'XC0C-MR': 'coOval', 'XC0C-iR': 'coOval',
+  'SBS50': 'base', 'SBS10': 'base',
+  'SWS51': 'water', 'SWS0A': 'water',
+  'STH0A': 'thermo', 'STH0B': 'thermo', 'STH51': 'pebble',
+  'SMS0A': 'motion', 'SDS0A': 'door', 'SKP0A': 'keypad'
+};
+/* Unbekanntes Modell: nach der Alarmart */
+const GERAET_ART = { smoke: 'smoke', co: 'coOval', heat: 'heat', water: 'water' };
+
+/* Bild eines Geräts: eigenes Foto aus assets/ vor der Zeichnung, die Zeichnung nach Modell oder Alarmart */
+function geraetBild(g) {
+  if (bilder[g.model]) { return '<img class="foto" alt="" src="' + esc(bilder[g.model]) + '">'; }
+  let form = GERAET_MODELL[g.model];
+  if (!form) {
+    const a = (g.indicators || []).find((i) => i.key === 'alarm');
+    form = a ? GERAET_ART[a.kind] : '';
+  }
+  return form && GERAET_SVG[form] ? '<div class="geraet">' + GERAET_SVG[form] + '</div>' : '';
+}
+
 let zustand = null;
 let bilder = {};   // Modell → Foto (data-URI), einmal aus dem Seitenaufbau
 let letzteStufe = -1;
@@ -470,7 +557,7 @@ function zeichneRaster(geraete) {
       : '<span class="chip ok">' + esc(text('ok')) + '</span>';
     const werte = (g.values || []).map((v) => '<span class="chip">' + esc(v.name) + ' ' + esc(v.value) + esc(v.unit ? ' ' + v.unit : '') + '</span>').join('');
     return '<div class="karte l' + (g.level | 0) + '" data-id="' + (g.id | 0) + '">' +
-      '<div class="kopf">' + (bilder[g.model] ? '<img class="foto" alt="" src="' + esc(bilder[g.model]) + '">' : '') +
+      '<div class="kopf">' + geraetBild(g) +
       '<div class="texte"><div class="name">' + esc(g.name) + '</div>' +
       (g.model ? '<div class="modell">' + esc(g.model) + '</div>' : '') + '</div>' +
       '<div class="marke">' + icon(markeIcon(g)) + '</div></div>' +
