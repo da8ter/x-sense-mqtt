@@ -55,7 +55,9 @@ Die Kachel richtet sich nach ihrer Größe:
 
 Die Karten zeigen eine Zeichnung des Geräts (Rauch-, Kombi-, CO-, Hitze- und Wassermelder, Basisstation, Thermo-Hygrometer, Bewegungsmelder, Tür-/Fensterkontakt, Tastenfeld); unbekannte Modelle bekommen die Zeichnung ihrer Alarmart. Ein eigenes Foto unter `assets/<Modell>.png` (oder `.webp`/`.jpg`, z. B. `assets/XS0B-MR.png`) ersetzt die Zeichnung. Die Fotos werden nur für vorhandene Modelle und nur einmal beim Laden der Kachel übertragen.
 
-Ein Klick auf ein Gerät öffnet dessen Instanz. Bei einem Alarm pulsiert der Gesamtstatus zweimal und bleibt dann rot.
+Ein Klick auf ein Gerät öffnet dessen Instanz.
+
+Bei einem Alarm legt sich ein pulsierendes rotes Overlay über die ganze Kachel: groß die Alarmart (z. B. „RAUCHALARM!“), darunter die auslösenden Geräte. Antippen blendet es in diesem Fenster aus, bis ein weiteres Gerät auslöst; ist „Bewegung reduzieren“ eingestellt, pulsiert es nicht.
 
 ### 7. PHP-Befehlsreferenz
 

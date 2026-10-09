@@ -42,7 +42,14 @@
             "Lifetime": "Lebensdauer",
             "Connection": "Verbindung",
             "Detector": "Melder",
-            "Notice": "Hinweis"
+            "Notice": "Hinweis",
+            "SMOKE ALARM!": "RAUCHALARM!",
+            "CO ALARM!": "CO-ALARM!",
+            "HEAT ALARM!": "HITZEALARM!",
+            "WATER ALARM!": "WASSERALARM!",
+            "ALARM!": "ALARM!",
+            "and %d more": "und %d weitere",
+            "Tap for details": "Tippen für Details"
         },
         "en": {
             "X Sense MQTT Security Center": "X-Sense Security Center",
@@ -86,7 +93,14 @@
             "Lifetime": "Lifetime",
             "Connection": "Connection",
             "Detector": "Detector",
-            "Notice": "Notice"
+            "Notice": "Notice",
+            "SMOKE ALARM!": "SMOKE ALARM!",
+            "CO ALARM!": "CO ALARM!",
+            "HEAT ALARM!": "HEAT ALARM!",
+            "WATER ALARM!": "WATER ALARM!",
+            "ALARM!": "ALARM!",
+            "and %d more": "and %d more",
+            "Tap for details": "Tap for details"
         }
     }
 }
