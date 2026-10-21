@@ -5,7 +5,7 @@
         "X-Sense MQTT Device"
     ],
     "type": 3,
-    "vendor": "da8ter",
+    "vendor": "X-Sense",
     "parentRequirements": [
         "{D5C8F9A1-2D3E-4F50-8A6B-1C2D3E4F5A6B}"
     ],
