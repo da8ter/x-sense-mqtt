@@ -98,9 +98,14 @@ trait XSenseMQTTDeviceVariables
 
     private function updateDeviceInfo(array $device): void
     {
-        $this->SetValue('Manufacturer', (string)($device['manufacturer'] ?? ''));
-        $this->SetValue('Model', (string)($device['model'] ?? ''));
-        $this->SetValue('Firmware', (string)($device['sw_version'] ?? ''));
+        // Nicht jede Discovery-Nachricht trägt alle Gerätefelder (XSOB-MR: sw_version nur in einem Teil).
+        // Ein fehlendes Feld darf den schon bekannten Wert nicht leeren.
+        foreach (['manufacturer' => 'Manufacturer', 'model' => 'Model', 'sw_version' => 'Firmware'] as $key => $ident) {
+            $value = trim((string)($device[$key] ?? ''));
+            if ($value !== '') {
+                $this->SetValue($ident, $value);
+            }
+        }
     }
 
     private function maintainEntityVariable(array $entry): void
