@@ -1,5 +1,7 @@
 # X-Sense MQTT (IP-Symcon)
 
+![X-Sense MQTT — Sicherheitszentrale](https://raw.githubusercontent.com/da8ter/images/main/X-Sense%20MQTT%20Vollbild.png)
+
 Module zur Integration von X-Sense Geräten über MQTT in IP-Symcon.
 
 ## Bisher mit folgenden Geräten getestet:
@@ -71,7 +73,7 @@ X-Sense MQTT Device (Device)
 
 ## 7. Versionshistorie
 
-- **0.5** (in Arbeit): neues Modul „X-Sense Sicherheitszentrale" (HTML-Kachel). Gerät: „End of Life" und „Smoke Fault Status" teilten sich bisher eine Variable (beide `device_class: problem`); eine Rauchsensor-Störung bekommt jetzt eine eigene Variable, das Lebensende behält seine. Neue Funktion `XSND_GetEntityMap`.
+- **0.5**: neues Modul „X-Sense Sicherheitszentrale" (HTML-Kachel). Gerät: „End of Life" und „Smoke Fault Status" teilten sich bisher eine Variable (beide `device_class: problem`); eine Rauchsensor-Störung bekommt jetzt eine eigene Variable, das Lebensende behält seine. Neue Funktion `XSND_GetEntityMap`. Hersteller, Modell und Firmware bleiben erhalten, wenn eine Discovery-Nachricht das Feld nicht mitbringt (die Firmware blieb bei manchen Meldern leer).
 - **0.4**: Symcon 9.1: Beschriftungen der Bool-Variablen als Modul-Darstellung über `MaintainVariable` (die frühere Benutzer-Darstellung mit `ColorDisplay` lehnt 9.1 ab, jede MQTT-Nachricht endete im Fehler 201); eine alte Benutzer-Darstellung des Moduls wird einmalig entfernt, eigene bleiben. Status 201 (Bridge inaktiv) setzt sich bei Statuswechsel der Bridge selbst zurück. Discovery in einem Durchgang, Entity-Bestand und Topic-Index je Objekt gepuffert (gültig nur für den gelesenen Attributstand), Debug ohne Formatierung im Normalbetrieb. Code des Gerätemoduls in `libs/XSenseMQTTDeviceDiscovery.php` und `libs/XSenseMQTTDeviceVariables.php`; Rauchtest [tests/smoke_test.php](tests/smoke_test.php) (nutzt den Prüfstand-Kernel aus `modules/LGThinQ`).
 - **0.3**: Umstellung auf Module Strict.
 - **0.2**: Aufräumen und Code optimiert.

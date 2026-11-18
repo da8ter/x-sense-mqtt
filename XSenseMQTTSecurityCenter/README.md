@@ -1,4 +1,7 @@
 # X Sense MQTT Security Center
+
+![X-Sense MQTT — Sicherheitszentrale als Kachel](https://raw.githubusercontent.com/da8ter/images/main/X-Sense%20MQTT%20Kachel.png)
+
 Sicherheitszentrale als Kachel: zeigt den Zustand aller X-Sense-Geräte (Rauchalarm, Sensorstörung, Batterie, Lebensende, Verbindung) in einem Dashboard der Tile-Visualisierung.
 
 ### Inhaltsverzeichnis
@@ -21,7 +24,7 @@ Sicherheitszentrale als Kachel: zeigt den Zustand aller X-Sense-Geräte (Rauchal
 
 ### 2. Voraussetzungen
 
-- Symcon ab Version 8.1; die vergrößerte Kachel zeigt das Dashboard ab Symcon 9.1
+- Symcon ab Version 8.1
 - Eingerichtete `X Sense MQTT Device`-Instanzen
 
 ### 3. Software-Installation
@@ -55,9 +58,13 @@ Die Kachel richtet sich nach ihrer Größe:
 
 Die Karten zeigen eine Zeichnung des Geräts (Rauch-, Kombi-, CO-, Hitze- und Wassermelder, Basisstation, Thermo-Hygrometer, Bewegungsmelder, Tür-/Fensterkontakt, Tastenfeld); unbekannte Modelle bekommen die Zeichnung ihrer Alarmart. Ein eigenes Foto unter `assets/<Modell>.png` (oder `.webp`/`.jpg`, z. B. `assets/XS0B-MR.png`) ersetzt die Zeichnung. Die Fotos werden nur für vorhandene Modelle und nur einmal beim Laden der Kachel übertragen.
 
+![X-Sense MQTT — Sicherheitszentrale groß](https://raw.githubusercontent.com/da8ter/images/main/X-Sense%20MQTT%20Vollbild.png)
+
 Ein Klick auf ein Gerät öffnet dessen Instanz.
 
 Bei einem Alarm legt sich ein pulsierendes rotes Overlay über die ganze Kachel: groß die Alarmart (z. B. „RAUCHALARM!“), darunter die auslösenden Geräte. Antippen blendet es in diesem Fenster aus, bis ein weiteres Gerät auslöst; ist „Bewegung reduzieren“ eingestellt, pulsiert es nicht.
+
+![X-Sense MQTT — Alarm](https://raw.githubusercontent.com/da8ter/images/main/X-Sense%20MQTT%20Alarm.png)
 
 ### 7. PHP-Befehlsreferenz
 
